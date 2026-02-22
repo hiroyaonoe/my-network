@@ -81,8 +81,12 @@ Examples:
 ### Router Configuration
 
 - **File**: `router/catalyst-3560cx.conf`
-- Apply via Catalyst CLI (copy-paste or `copy tftp: running-config`)
+- **Apply methods**:
+  - SSH: Connect and copy-paste config sections into `configure terminal` mode
+  - Console: Use serial cable (115200 baud) and copy-paste
+  - TFTP: `copy tftp://server/catalyst-3560cx.conf running-config`
 - After changes: `copy running-config startup-config`
+- See `router/README.md` for detailed procedures
 
 ### Proxmox Node Configuration
 
