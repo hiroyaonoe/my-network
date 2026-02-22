@@ -23,7 +23,7 @@ Proxmox VEを用いた3ノードの仮想化基盤を構築する。
 |------|---------|
 | CPU | AMD Ryzen 7 5000 series |
 | RAM | 16GB |
-| SSD 1 | 256GB (Proxmox OS用) |
+| SSD 1 | 512GB (Proxmox OS用) |
 | SSD 2 | 1TB (Ceph OSD用) |
 | NIC | 2.5GbE x 2ポート |
 
