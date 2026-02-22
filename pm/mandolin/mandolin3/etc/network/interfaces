@@ -1,0 +1,33 @@
+# /etc/network/interfaces for mandolin3
+# Proxmox VE ネットワーク設定
+
+# 物理NIC
+auto eno1
+iface eno1 inet manual
+
+auto eno2
+iface eno2 inet manual
+
+# LACP Bond
+auto bond0
+iface bond0 inet manual
+    bond-slaves eno1 eno2
+    bond-miimon 100
+    bond-mode 802.3ad
+    bond-xmit-hash-policy layer3+4
+
+# VLAN-aware Bridge (メインブリッジ)
+auto vmbr0
+iface vmbr0 inet static
+    address 172.16.0.13/24
+    gateway 172.16.0.1
+    bridge-ports bond0
+    bridge-stp off
+    bridge-fd 0
+    bridge-vlan-aware yes
+    bridge-vids 20 100-227
+
+# Cephネットワーク (VLAN 20)
+auto vmbr0.20
+iface vmbr0.20 inet static
+    address 172.16.1.13/24
