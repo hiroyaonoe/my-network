@@ -60,30 +60,22 @@ show running-config
 copy running-config startup-config
 ```
 
-## 初期セットアップ時の注意
+## 初期セットアップ（新品/リセット後）
 
-### IPアドレスが未設定の場合
+新品のCatalystまたは設定リセット後の初回セットアップ手順。
 
-1. コンソールケーブルで接続
-2. 管理用IPを先に設定:
-   ```
-   enable
-   configure terminal
-   interface Vlan10
-    ip address 172.16.0.1 255.255.255.0
-    no shutdown
-   exit
+**詳細は `INITIAL-SETUP.md` を参照。**
 
-   # ポート1つをVLAN 10に割り当て（一時的）
-   interface GigabitEthernet0/2
-    switchport mode access
-    switchport access vlan 10
-    no shutdown
-   exit
-   end
-   ```
-3. PCをGi0/2に接続し、172.16.0.0/24のIPを設定
-4. SSH接続可能になったら残りの設定を投入
+### クイックスタート
+
+1. **コンソール接続** (115200 baud)
+2. **`initial-setup.conf` を投入** (パスワード部分は書き換え)
+3. **PCをGi0/2に接続** (IP: 172.16.0.100/24)
+4. **SSH接続確認** (`ssh admin@172.16.0.1`)
+5. **`catalyst-3560cx.conf` の残り設定を投入**
+6. **Gi0/2をshutdown**
+
+> この方法ではWAN側ルータ接続（Gi0/1）に影響を与えません。
 
 ### ネットワーク変更時の注意
 

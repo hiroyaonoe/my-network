@@ -17,6 +17,10 @@ Configuration files mirror actual filesystem paths on target systems:
 .
 ├── docs/
 │   └── design.md                    # Complete infrastructure design document
+├── etc/
+│   ├── hosts                        # /etc/hosts entries
+│   ├── ssh-config                   # ~/.ssh/config entries
+│   └── README.md                    # Local PC configuration guide
 ├── router/
 │   └── catalyst-3560cx.conf         # Catalyst IOS configuration
 ├── pm/mandolin/                     # Proxmox cluster configs

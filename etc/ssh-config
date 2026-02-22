@@ -1,0 +1,38 @@
+# ~/.ssh/config に追記する内容
+# VM基盤管理用のSSH設定
+
+# Catalyst 3560-CX (古いSSH方式を許可)
+Host local-router catalyst 192.168.1.1
+    HostName 192.168.1.1
+    User admin
+    KexAlgorithms +diffie-hellman-group14-sha1
+    HostKeyAlgorithms +ssh-rsa
+    PubkeyAcceptedAlgorithms +ssh-rsa
+
+# Catalyst 管理ネットワーク経由 (初期セットアップ用)
+Host local-router-mgmt 172.16.0.1
+    HostName 172.16.0.1
+    User admin
+    KexAlgorithms +diffie-hellman-group14-sha1
+    HostKeyAlgorithms +ssh-rsa
+    PubkeyAcceptedAlgorithms +ssh-rsa
+
+# Proxmox VE ノード
+Host mandolin1 172.16.0.11
+    HostName 172.16.0.11
+    User root
+
+Host mandolin2 172.16.0.12
+    HostName 172.16.0.12
+    User root
+
+Host mandolin3 172.16.0.13
+    HostName 172.16.0.13
+    User root
+
+# Proxmox ノード共通設定 (ワイルドカード)
+Host mandolin*
+    User root
+    # 初回セットアップ時のみ
+    # StrictHostKeyChecking no
+    # UserKnownHostsFile /dev/null
