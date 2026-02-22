@@ -119,11 +119,94 @@ configure this server - connect to:
 Login with username 'root' and your root password.
 ```
 
+> **注意**: この時点ではまだWeb UIやSSHにアクセスできません。
+> 先にコンソールでネットワーク設定（bonding + VLAN）を適用する必要があります。
+
 ## 初期設定
 
-### 4. Web UIアクセス
+### 4. ネットワーク設定の適用（コンソールで実行）
 
-ブラウザで `https://172.16.0.11:8006` にアクセス:
+**重要**: Web UI/SSHアクセスの前に、bonding + VLAN設定を適用します。
+
+#### 4.1 NIC名の確認
+
+```bash
+# Proxmoxコンソールでログイン（root / インストール時のパスワード）
+
+# NICの速度確認（2.5GbEのNICを特定）
+for nic in /sys/class/net/*/; do
+    name=$(basename $nic)
+    if [ -f "$nic/speed" ]; then
+        speed=$(cat $nic/speed 2>/dev/null || echo "N/A")
+        echo "$name: $speed Mbps"
+    fi
+done
+
+# 出力例:
+# nic0: 1000 Mbps    ← オンボード（使用しない）
+# nic1: 1000 Mbps    ← オンボード（使用しない）
+# nic2: 2500 Mbps    ← 増設カード（bonding用）
+# nic3: 2500 Mbps    ← 増設カード（bonding用）
+```
+
+#### 4.2 設定ファイルのバックアップ
+
+```bash
+cp /etc/network/interfaces /etc/network/interfaces.bak
+```
+
+#### 4.3 設定ファイルの編集
+
+```bash
+# エディタで開く
+nano /etc/network/interfaces
+```
+
+**リポジトリの設定ファイル（`pm/mandolin/mandolin1/etc/network/interfaces`）の内容をコピー。**
+
+**重要**: `bond-slaves` の行を実際のNIC名に修正:
+
+```
+auto bond0
+iface bond0 inet manual
+    bond-slaves nic2 nic3    # ← 2.5GbEのNIC名に変更
+    bond-miimon 100
+    bond-mode 802.3ad
+    bond-xmit-hash-policy layer3+4
+```
+
+保存して終了（Ctrl+O, Enter, Ctrl+X）
+
+#### 4.4 ネットワーク再起動
+
+```bash
+# ネットワーク設定を適用
+ifreload -a
+
+# または再起動
+reboot
+```
+
+#### 4.5 動作確認
+
+```bash
+# 再起動後、再度コンソールでログイン
+
+# bond0が作成されているか
+ip link show bond0
+
+# vmbr0の確認
+ip addr show vmbr0
+# 172.16.0.11 が割り当てられているか確認
+
+# Cephネットワーク確認
+ip addr show vmbr0.20
+# 172.16.1.11 が割り当てられているか確認
+```
+
+### 5. Web UIアクセス
+
+ネットワーク設定適用後、ブラウザで `https://172.16.0.11:8006` にアクセス:
 
 1. **証明書警告**: 「詳細設定」→「アクセスする」（自己署名証明書のため）
 2. **ログイン**:
@@ -131,7 +214,7 @@ Login with username 'root' and your root password.
    - Password: インストール時に設定したパスワード
    - Realm: `Linux PAM standard authentication`
 
-### 5. サブスクリプション警告の無効化（任意）
+### 6. サブスクリプション警告の無効化（任意）
 
 ログイン後に「No valid subscription」警告が出る場合:
 
@@ -140,16 +223,21 @@ Login with username 'root' and your root password.
 ssh root@172.16.0.11
 
 # リポジトリ変更（Enterprise → No-Subscription）
-sed -i 's/^deb/#deb/' /etc/apt/sources.list.d/pve-enterprise.list
-echo "deb http://download.proxmox.com/debian/pve bookworm pve-no-subscription" > /etc/apt/sources.list.d/pve-no-subscription.list
+# Proxmox VE 8.x 以降は DEB822形式 (.sources)
+# Enterprise リポジトリを無効化（リネーム）
+mv /etc/apt/sources.list.d/pve-enterprise.sources /etc/apt/sources.list.d/pve-enterprise.sources.disabled
+
+# No-Subscription リポジトリを追加（DEB822形式）
+cat > /etc/apt/sources.list.d/pve-no-subscription.sources <<EOF
+Types: deb
+URIs: http://download.proxmox.com/debian/pve
+Suites: bookworm
+Components: pve-no-subscription
+EOF
 
 # 更新
 apt update && apt upgrade -y
 ```
-
-### 6. ネットワーク設定の適用
-
-**重要**: この手順でbonding + VLAN設定を適用します。
 
 ```bash
 # SSH接続
@@ -186,28 +274,21 @@ ifreload -a
 reboot
 ```
 
-### 7. 動作確認
+### 7. 最終確認
 
-再起動後、SSH再接続:
+SSH接続して動作確認:
 
 ```bash
 ssh root@172.16.0.11
 
-# インターフェース確認
-ip addr show
-
-# bond0が作成されているか
-ip link show bond0
-
-# vmbr0の確認
-ip link show vmbr0
-
-# Cephネットワーク確認
-ip addr show vmbr0.20
-# 172.16.1.11 が割り当てられているか
+# Port-Channel状態確認（Catalyst側でも確認推奨）
+cat /proc/net/bonding/bond0
 
 # ルーティング確認
 ip route
+
+# Catalystへのping
+ping -c 3 172.16.0.1
 ```
 
 ## 2台目・3台目のインストール
