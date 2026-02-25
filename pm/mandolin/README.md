@@ -15,16 +15,12 @@
 
 ```
 pm/mandolin/
-├── mandolin1/etc/
-│   ├── network/interfaces  # mandolin1のネットワーク設定
-│   └── resolv.conf         # mandolin1のDNS設定
-├── mandolin2/etc/
-│   ├── network/interfaces  # mandolin2のネットワーク設定
-│   └── resolv.conf         # mandolin2のDNS設定
-├── mandolin3/etc/
-│   ├── network/interfaces  # mandolin3のネットワーク設定
-│   └── resolv.conf         # mandolin3のDNS設定
-├── etc/ceph/ceph.conf      # Ceph設定 (全ノード共通)
+├── mandolin1/etc/network/interfaces  # mandolin1のネットワーク設定
+├── mandolin2/etc/network/interfaces  # mandolin2のネットワーク設定
+├── mandolin3/etc/network/interfaces  # mandolin3のネットワーク設定
+├── etc/
+│   ├── ceph/ceph.conf                # Ceph設定 (全ノード共通)
+│   └── resolv.conf                   # DNS設定 (全ノード共通)
 └── README.md
 ```
 
@@ -44,12 +40,13 @@ ssh root@10.1.1.12 'ifreload -a'
 ssh root@10.1.1.13 'ifreload -a'
 ```
 
-### Ceph設定
+### Ceph設定とDNS設定
 
 ```bash
-# 全ノードにCeph設定をコピー
+# 全ノードにCeph設定とDNS設定をコピー
 for node in 10.1.1.{11,12,13}; do
-  scp -r etc/ceph root@$node:/etc/
+  scp etc/ceph/ceph.conf root@$node:/etc/ceph/
+  scp etc/resolv.conf root@$node:/etc/
 done
 ```
 
