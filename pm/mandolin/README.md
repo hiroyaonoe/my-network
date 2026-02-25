@@ -15,10 +15,16 @@
 
 ```
 pm/mandolin/
-├── mandolin1/etc/network/interfaces  # mandolin1のネットワーク設定
-├── mandolin2/etc/network/interfaces  # mandolin2のネットワーク設定
-├── mandolin3/etc/network/interfaces  # mandolin3のネットワーク設定
-├── etc/ceph/ceph.conf                # Ceph設定 (全ノード共通)
+├── mandolin1/etc/
+│   ├── network/interfaces  # mandolin1のネットワーク設定
+│   └── resolv.conf         # mandolin1のDNS設定
+├── mandolin2/etc/
+│   ├── network/interfaces  # mandolin2のネットワーク設定
+│   └── resolv.conf         # mandolin2のDNS設定
+├── mandolin3/etc/
+│   ├── network/interfaces  # mandolin3のネットワーク設定
+│   └── resolv.conf         # mandolin3のDNS設定
+├── etc/ceph/ceph.conf      # Ceph設定 (全ノード共通)
 └── README.md
 ```
 
