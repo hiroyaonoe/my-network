@@ -10,7 +10,14 @@
 
 ```bash
 # 1. Catalystに既存IPでSSH接続
-ssh admin@<current-ip>
+# 古いSSH方式のため、以下のオプションが必要（~/.ssh/config未設定の場合）
+ssh -oKexAlgorithms=+diffie-hellman-group14-sha1 \
+    -oHostKeyAlgorithms=+ssh-rsa \
+    -oPubkeyAcceptedAlgorithms=+ssh-rsa \
+    admin@<current-ip>
+
+# または、~/.ssh/config に etc/ssh-config を追記済みであれば
+ssh local-router
 
 # 2. 設定モードに入る
 enable
@@ -71,7 +78,7 @@ copy running-config startup-config
 1. **コンソール接続** (9600 baud)
 2. **`initial-setup.conf` を投入** (パスワード部分は書き換え)
 3. **PCをGi0/2に接続** (IP: 10.1.1.100/24)
-4. **SSH接続確認** (`ssh admin@10.1.1.1`)
+4. **SSH接続確認** (古いSSHオプション必要、詳細はINITIAL-SETUP.md参照)
 5. **`catalyst-3560cx.conf` の残り設定を投入**
 6. **Gi0/2をshutdown**
 

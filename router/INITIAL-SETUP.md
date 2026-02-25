@@ -59,10 +59,18 @@ PC <--LANケーブル--> Catalyst Gi0/2
 
 ```bash
 # PC から Catalyst へ SSH接続
-ssh admin@10.1.1.1
+# Catalystは古いSSH方式のため、以下のオプションが必要
+ssh -oKexAlgorithms=+diffie-hellman-group14-sha1 \
+    -oHostKeyAlgorithms=+ssh-rsa \
+    -oPubkeyAcceptedAlgorithms=+ssh-rsa \
+    admin@10.1.1.1
 
 # パスワード入力後、接続できることを確認
 ```
+
+> **推奨**: `etc/ssh-config` を `~/.ssh/config` に追記すれば、
+> `ssh local-router` または `ssh admin@10.1.1.1` で
+> オプション指定なしで接続できます。詳細は `etc/README.md` 参照。
 
 ### 6. 残りの設定を投入
 
