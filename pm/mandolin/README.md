@@ -29,10 +29,10 @@ pm/mandolin/
 ### ネットワーク設定
 
 ```bash
-# 各ノードへコピー
-scp -r mandolin1/etc root@10.1.1.11:/
-scp -r mandolin2/etc root@10.1.1.12:/
-scp -r mandolin3/etc root@10.1.1.13:/
+# 各ノードへネットワーク設定をコピー
+scp pm/mandolin/mandolin1/etc/network/interfaces root@10.1.1.11:/etc/network/interfaces
+scp pm/mandolin/mandolin2/etc/network/interfaces root@10.1.1.12:/etc/network/interfaces
+scp pm/mandolin/mandolin3/etc/network/interfaces root@10.1.1.13:/etc/network/interfaces
 
 # 各ノードで実行 (慎重に！SSH接続が切れる可能性あり)
 ssh root@10.1.1.11 'ifreload -a'
@@ -40,13 +40,18 @@ ssh root@10.1.1.12 'ifreload -a'
 ssh root@10.1.1.13 'ifreload -a'
 ```
 
-### Ceph設定とDNS設定
+### DNS設定とCeph設定
 
 ```bash
-# 全ノードにCeph設定とDNS設定をコピー
+# 全ノードにDNS設定をコピー
 for node in 10.1.1.{11,12,13}; do
-  scp etc/ceph/ceph.conf root@$node:/etc/ceph/
-  scp etc/resolv.conf root@$node:/etc/
+  scp pm/mandolin/etc/resolv.conf root@$node:/etc/resolv.conf
+done
+
+# 全ノードにCeph設定をコピー（Cephセットアップ時）
+for node in 10.1.1.{11,12,13}; do
+  ssh root@$node 'mkdir -p /etc/ceph'
+  scp pm/mandolin/etc/ceph/ceph.conf root@$node:/etc/ceph/ceph.conf
 done
 ```
 
