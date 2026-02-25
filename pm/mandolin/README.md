@@ -9,6 +9,7 @@
 ## ドキュメント
 
 - **[INSTALL.md](INSTALL.md)** - Proxmox VEインストール手順（3ノード）
+- **[CLUSTER.md](CLUSTER.md)** - Proxmoxクラスタ・Cephクラスタ セットアップ手順
 - **README.md** (このファイル) - 設定ファイルの適用方法
 
 ## ディレクトリ構造

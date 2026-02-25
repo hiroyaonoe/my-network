@@ -278,8 +278,8 @@ mandolin2, mandolin3 も同様の手順で：
 
 3台のインストール完了後:
 
-1. **Proxmoxクラスタ作成** → 別途手順書参照
-2. **Cephセットアップ** → `docs/design.md` セクション4.3参照
+1. **Proxmoxクラスタ作成** → **[CLUSTER.md](CLUSTER.md)** 参照
+2. **Cephセットアップ** → **[CLUSTER.md](CLUSTER.md)** 参照
 3. **VM作成** → `docs/design.md` セクション7.2参照
 
 ## トラブルシューティング
