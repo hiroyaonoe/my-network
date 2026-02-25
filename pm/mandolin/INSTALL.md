@@ -86,17 +86,17 @@ dd if=proxmox-ve_8.x.iso of=/dev/sdX bs=1M status=progress
 |---------|-----|------|
 | Management Interface | eno1（最初のNIC） | インストール時は1本でOK |
 | Hostname (FQDN) | mandolin1.internal.onoe.dev | |
-| IP Address (CIDR) | 172.16.0.11/24 | |
-| Gateway | 172.16.0.1 | Catalyst（設定済みの場合） |
-| DNS Server | 192.168.0.1 | WAN側ルータ |
+| IP Address (CIDR) | 10.1.1.11/24 | |
+| Gateway | 10.1.1.1 | Catalyst（設定済みの場合） |
+| DNS Server | 10.0.0.1 | WAN側ルータ |
 
 **mandolin2の場合:**
 - Hostname: `mandolin2.internal.onoe.dev`
-- IP Address: `172.16.0.12/24`
+- IP Address: `10.1.1.12/24`
 
 **mandolin3の場合:**
 - Hostname: `mandolin3.internal.onoe.dev`
-- IP Address: `172.16.0.13/24`
+- IP Address: `10.1.1.13/24`
 
 > Gateway/DNSは全ノード共通。
 
@@ -114,7 +114,7 @@ dd if=proxmox-ve_8.x.iso of=/dev/sdX bs=1M status=progress
 Welcome to the Proxmox Virtual Environment. Please use your web browser to
 configure this server - connect to:
 
-  https://172.16.0.11:8006/
+  https://10.1.1.11:8006/
 
 Login with username 'root' and your root password.
 ```
@@ -197,16 +197,16 @@ ip link show bond0
 
 # vmbr0の確認
 ip addr show vmbr0
-# 172.16.0.11 が割り当てられているか確認
+# 10.1.1.11 が割り当てられているか確認
 
 # Cephネットワーク確認
 ip addr show vmbr0.20
-# 172.16.1.11 が割り当てられているか確認
+# 10.1.2.11 が割り当てられているか確認
 ```
 
 ### 5. Web UIアクセス
 
-ネットワーク設定適用後、ブラウザで `https://172.16.0.11:8006` にアクセス:
+ネットワーク設定適用後、ブラウザで `https://10.1.1.11:8006` にアクセス:
 
 1. **証明書警告**: 「詳細設定」→「アクセスする」（自己署名証明書のため）
 2. **ログイン**:
@@ -220,7 +220,7 @@ ip addr show vmbr0.20
 
 ```bash
 # SSH接続して実行
-ssh root@172.16.0.11
+ssh root@10.1.1.11
 
 # リポジトリ変更（Enterprise → No-Subscription）
 # Proxmox VE 8.x 以降は DEB822形式 (.sources)
@@ -241,7 +241,7 @@ apt update && apt upgrade -y
 
 ```bash
 # SSH接続
-ssh root@172.16.0.11
+ssh root@10.1.1.11
 
 # NIC名を確認
 ip link show
@@ -255,10 +255,10 @@ cp /etc/network/interfaces /etc/network/interfaces.bak
 exit
 
 # ローカルPCで実行
-scp -r pm/mandolin/mandolin1/etc root@172.16.0.11:/
+scp -r pm/mandolin/mandolin1/etc root@10.1.1.11:/
 
 # 再度SSH接続
-ssh root@172.16.0.11
+ssh root@10.1.1.11
 
 # 設定確認
 cat /etc/network/interfaces
@@ -279,7 +279,7 @@ reboot
 SSH接続して動作確認:
 
 ```bash
-ssh root@172.16.0.11
+ssh root@10.1.1.11
 
 # Port-Channel状態確認（Catalyst側でも確認推奨）
 cat /proc/net/bonding/bond0
@@ -288,7 +288,7 @@ cat /proc/net/bonding/bond0
 ip route
 
 # Catalystへのping
-ping -c 3 172.16.0.1
+ping -c 3 10.1.1.1
 ```
 
 ## 2台目・3台目のインストール
@@ -296,7 +296,7 @@ ping -c 3 172.16.0.1
 mandolin2, mandolin3 も同様の手順で：
 
 1. 同じISOメディアでインストール
-2. IP: `172.16.0.12`, `172.16.0.13`
+2. IP: `10.1.1.12`, `10.1.1.13`
 3. Hostname: `mandolin2.internal.onoe.dev`, `mandolin3.internal.onoe.dev`
 4. ネットワーク設定適用: `mandolin2/etc`, `mandolin3/etc`
 

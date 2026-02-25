@@ -2,26 +2,26 @@
 # VM基盤管理用のホスト名定義
 
 # ローカルルータ / L3スイッチ
-192.168.1.1     local-router catalyst        # WAN側インターフェース (通常使用)
-172.16.0.1      local-router-mgmt            # 管理ネットワーク (初期セットアップ用)
+10.0.1.1        local-router catalyst        # WAN側インターフェース (通常使用)
+10.1.1.1        local-router-mgmt            # 管理ネットワーク (初期セットアップ用)
 
 # Proxmox VE クラスタ: mandolin
 # 管理ネットワーク (VLAN 10)
-172.16.0.11     mandolin1
-172.16.0.12     mandolin2
-172.16.0.13     mandolin3
+10.1.1.11       mandolin1
+10.1.1.12       mandolin2
+10.1.1.13       mandolin3
 
 # Ceph クラスタネットワーク (VLAN 20) - 参考
-# 172.16.1.11     mandolin1-ceph
-# 172.16.1.12     mandolin2-ceph
-# 172.16.1.13     mandolin3-ceph
+# 10.1.2.11       mandolin1-ceph
+# 10.1.2.12       mandolin2-ceph
+# 10.1.2.13       mandolin3-ceph
 
 # WAN側ルータ (参考)
-# 192.168.0.1     wan-router
+# 10.0.0.1        wan-router
 
 # VM用ネットワーク (初期VLAN)
 # 以下は例。実際のVMを作成したら追記する
-# 10.0.0.2       bastion-01      # VLAN 100
-# 10.0.0.34      lab-test-01     # VLAN 101
-# 10.0.0.66      k8s-master-01   # VLAN 102
-# 10.0.0.98      ai-worker-01    # VLAN 103
+# 10.2.0.2        bastion-01      # VLAN 100
+# 10.2.0.34       lab-test-01     # VLAN 101
+# 10.2.0.66       k8s-master-01   # VLAN 102
+# 10.2.0.98       ai-worker-01    # VLAN 103

@@ -44,24 +44,26 @@ Configuration files mirror actual filesystem paths on target systems:
 - **Cluster name**: `mandolin`
 - **Node names**: `mandolin1`, `mandolin2`, `mandolin3`
 - **IP addressing**:
-  - Management (VLAN 10): `172.16.0.11-13`
-  - Ceph cluster (VLAN 20): `172.16.1.11-13`
-  - VM networks: `10.0.0.0/20` subdivided by VLAN
+  - WAN router LAN: `10.0.0.0/16`
+  - Catalyst WAN-side: `10.0.1.1`
+  - Management (VLAN 10): `10.1.1.11-13`
+  - Ceph cluster (VLAN 20): `10.1.2.11-13`
+  - VM networks: `10.2.0.0/16` subdivided by VLAN
 
 ## Critical VLAN Design Rules
 
-VM VLANs (100-227) use a **mathematical allocation formula** to pack /27 subnets sequentially within 10.0.0.0/20:
+VM VLANs (100-227) use a **mathematical allocation formula** to pack /27 subnets sequentially within 10.2.0.0/16:
 
 ```
-VLAN (100 + N) → 10.0.(N/8).(N%8*32)/27
+VLAN (100 + N) → 10.2.(N/8).(N%8*32)/27
 Gateway = subnet first IP + 1
 Subnet mask = 255.255.255.224 (/27)
 ```
 
 Examples:
-- VLAN 100 (N=0): 10.0.0.0/27, GW 10.0.0.1
-- VLAN 101 (N=1): 10.0.0.32/27, GW 10.0.0.33
-- VLAN 108 (N=8): 10.0.1.0/27, GW 10.0.1.1
+- VLAN 100 (N=0): 10.2.0.0/27, GW 10.2.0.1
+- VLAN 101 (N=1): 10.2.0.32/27, GW 10.2.0.33
+- VLAN 108 (N=8): 10.2.1.0/27, GW 10.2.1.1
 
 **When adding new VLANs**:
 1. Calculate subnet using the formula above
@@ -78,7 +80,7 @@ Examples:
 
 3. **VLAN-aware bridging**: Proxmox uses a single VLAN-aware bridge (`vmbr0`). VMs specify VLAN tags at the hypervisor level (via Proxmox UI or `qm set`), not inside the guest OS.
 
-4. **Ceph networks**: Public network (172.16.0.0/24) for client I/O, Cluster network (172.16.1.0/24) for OSD replication, physically separated via VLAN 20.
+4. **Ceph networks**: Public network (10.1.1.0/24) for client I/O, Cluster network (10.1.2.0/24) for OSD replication, physically separated via VLAN 20.
 
 ## Configuration Management
 
@@ -95,14 +97,14 @@ Examples:
 ### Proxmox Node Configuration
 
 - **Files**: `pm/mandolin/mandolin{1,2,3}/etc/network/interfaces`
-- Apply: `scp -r mandolin1/etc root@172.16.0.11:/`
-- Then: `ssh root@172.16.0.11 'ifreload -a'`
+- Apply: `scp -r mandolin1/etc root@10.1.1.11:/`
+- Then: `ssh root@10.1.1.11 'ifreload -a'`
 - **Warning**: Network changes can break SSH. Use console access or test carefully.
 
 ### Ceph Configuration
 
 - **File**: `pm/mandolin/etc/ceph/ceph.conf`
-- Deploy to all nodes: `scp -r etc/ceph root@172.16.0.11:/etc/`
+- Deploy to all nodes: `scp -r etc/ceph root@10.1.1.11:/etc/`
 - Initial setup via Proxmox CLI (`pveceph install`, `pveceph mon create`, etc.)
 
 ### VM Configuration
@@ -118,12 +120,12 @@ Examples:
 
 ```bash
 # 1. Calculate N from desired VLAN ID: N = VLAN_ID - 100
-# 2. Calculate subnet: 10.0.(N/8).(N%8*32)/27
+# 2. Calculate subnet: 10.2.(N/8).(N%8*32)/27
 # 3. Add to router/catalyst-3560cx.conf:
 vlan <VLAN_ID>
  name vm-<purpose>
 interface Vlan<VLAN_ID>
- ip address 10.0.X.Y 255.255.255.224
+ ip address 10.2.X.Y 255.255.255.224
  no shutdown
 
 # 4. Update docs/design.md section 3.2

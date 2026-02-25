@@ -19,8 +19,8 @@ iface bond0 inet manual
 # VLAN-aware Bridge (メインブリッジ)
 auto vmbr0
 iface vmbr0 inet static
-    address 172.16.0.13/24
-    gateway 172.16.0.1
+    address 10.1.1.13/24
+    gateway 10.1.1.1
     bridge-ports bond0
     bridge-stp off
     bridge-fd 0
@@ -30,4 +30,4 @@ iface vmbr0 inet static
 # Cephネットワーク (VLAN 20)
 auto vmbr0.20
 iface vmbr0.20 inet static
-    address 172.16.1.13/24
+    address 10.1.2.13/24

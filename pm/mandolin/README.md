@@ -4,7 +4,7 @@
 
 - **クラスタ名**: mandolin
 - **ノード数**: 3
-- **ノード**: mandolin1 (172.16.0.11), mandolin2 (172.16.0.12), mandolin3 (172.16.0.13)
+- **ノード**: mandolin1 (10.1.1.11), mandolin2 (10.1.1.12), mandolin3 (10.1.1.13)
 
 ## ドキュメント
 
@@ -28,21 +28,21 @@ pm/mandolin/
 
 ```bash
 # 各ノードへコピー
-scp -r mandolin1/etc root@172.16.0.11:/
-scp -r mandolin2/etc root@172.16.0.12:/
-scp -r mandolin3/etc root@172.16.0.13:/
+scp -r mandolin1/etc root@10.1.1.11:/
+scp -r mandolin2/etc root@10.1.1.12:/
+scp -r mandolin3/etc root@10.1.1.13:/
 
 # 各ノードで実行 (慎重に！SSH接続が切れる可能性あり)
-ssh root@172.16.0.11 'ifreload -a'
-ssh root@172.16.0.12 'ifreload -a'
-ssh root@172.16.0.13 'ifreload -a'
+ssh root@10.1.1.11 'ifreload -a'
+ssh root@10.1.1.12 'ifreload -a'
+ssh root@10.1.1.13 'ifreload -a'
 ```
 
 ### Ceph設定
 
 ```bash
 # 全ノードにCeph設定をコピー
-for node in 172.16.0.{11,12,13}; do
+for node in 10.1.1.{11,12,13}; do
   scp -r etc/ceph root@$node:/etc/
 done
 ```
