@@ -214,20 +214,18 @@ ip addr show vmbr0.20
    - Password: インストール時に設定したパスワード
    - Realm: `Linux PAM standard authentication`
 
-### 6. サブスクリプション警告の無効化（任意）
+### 6. サブスクリプション警告の無効化（必須）
 
-ログイン後に「No valid subscription」警告が出る場合:
+ログイン後に「No valid subscription」警告が出る場合、またはapt updateでエラーが出る場合:
 
 ```bash
 # SSH接続して実行
 ssh root@10.1.1.11
 
-# リポジトリ変更（Enterprise → No-Subscription）
-# Proxmox VE 8.x 以降は DEB822形式 (.sources)
-# Enterprise リポジトリを無効化（リネーム）
+# 1. PVE Enterprise リポジトリを無効化（リネーム）
 mv /etc/apt/sources.list.d/pve-enterprise.sources /etc/apt/sources.list.d/pve-enterprise.sources.disabled
 
-# No-Subscription リポジトリを追加（DEB822形式）
+# 2. PVE No-Subscription リポジトリを追加（DEB822形式）
 cat > /etc/apt/sources.list.d/pve-no-subscription.sources <<EOF
 Types: deb
 URIs: http://download.proxmox.com/debian/pve
@@ -235,43 +233,19 @@ Suites: bookworm
 Components: pve-no-subscription
 EOF
 
-# 更新
+# 3. Ceph Enterprise リポジトリを無効化（リネーム）
+mv /etc/apt/sources.list.d/ceph.sources /etc/apt/sources.list.d/ceph.sources.disabled
+
+# 4. Ceph No-Subscription リポジトリを追加（DEB822形式）
+cat > /etc/apt/sources.list.d/ceph-no-subscription.sources <<EOF
+Types: deb
+URIs: http://download.proxmox.com/debian/ceph-squid
+Suites: bookworm
+Components: no-subscription
+EOF
+
+# 5. 更新
 apt update && apt upgrade -y
-```
-
-```bash
-# SSH接続
-ssh root@10.1.1.11
-
-# NIC名を確認
-ip link show
-# eno1, eno2 等が表示される。以下の設定ファイルでNIC名を確認・修正。
-
-# 設定ファイルをバックアップ
-cp /etc/network/interfaces /etc/network/interfaces.bak
-
-# ローカルPCから設定ファイルをコピー
-# （リポジトリのpm/mandolin/mandolin1/etc/network/interfaces）
-exit
-
-# ローカルPCで実行
-scp -r pm/mandolin/mandolin1/etc root@10.1.1.11:/
-
-# 再度SSH接続
-ssh root@10.1.1.11
-
-# 設定確認
-cat /etc/network/interfaces
-
-# NIC名が正しいか確認（eno1, eno2 → 実際のNIC名に修正）
-vi /etc/network/interfaces
-
-# ネットワーク再起動（SSH接続が切れる可能性あり）
-# 念のためコンソールアクセスを確保してから実行
-ifreload -a
-
-# または安全に再起動
-reboot
 ```
 
 ### 7. 最終確認
