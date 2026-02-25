@@ -44,9 +44,9 @@ enable secret MySecurePass123!
 Catalystの Gi0/2 に接続するPCのネットワーク設定:
 
 ```
-IPアドレス: 172.16.0.100
+IPアドレス: 10.1.1.100
 サブネットマスク: 255.255.255.0 (または /24)
-ゲートウェイ: 172.16.0.1
+ゲートウェイ: 10.1.1.1
 ```
 
 ### 4. LAN接続
@@ -59,7 +59,7 @@ PC <--LANケーブル--> Catalyst Gi0/2
 
 ```bash
 # PC から Catalyst へ SSH接続
-ssh admin@172.16.0.1
+ssh admin@10.1.1.1
 
 # パスワード入力後、接続できることを確認
 ```
@@ -113,7 +113,7 @@ show crypto key mypubkey rsa
 # → RSA鍵が生成されているか
 
 # PC側から ping確認
-ping 172.16.0.1
+ping 10.1.1.1
 ```
 
 ### パスワードを忘れた場合

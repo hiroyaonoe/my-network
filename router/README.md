@@ -70,8 +70,8 @@ copy running-config startup-config
 
 1. **コンソール接続** (115200 baud)
 2. **`initial-setup.conf` を投入** (パスワード部分は書き換え)
-3. **PCをGi0/2に接続** (IP: 172.16.0.100/24)
-4. **SSH接続確認** (`ssh admin@172.16.0.1`)
+3. **PCをGi0/2に接続** (IP: 10.1.1.100/24)
+4. **SSH接続確認** (`ssh admin@10.1.1.1`)
 5. **`catalyst-3560cx.conf` の残り設定を投入**
 6. **Gi0/2をshutdown**
 
@@ -117,10 +117,10 @@ vlan 104
 exit
 
 # SVI (ゲートウェイ) 作成
-# 採番ルール: VLAN (100+N) → 10.0.(N/8).(N%8*32)/27
-# VLAN 104 = N=4 → 10.0.0.128/27, GW=10.0.0.129
+# 採番ルール: VLAN (100+N) → 10.2.(N/8).(N%8*32)/27
+# VLAN 104 = N=4 → 10.2.0.128/27, GW=10.2.0.129
 interface Vlan104
- ip address 10.0.0.129 255.255.255.224
+ ip address 10.2.0.129 255.255.255.224
  no shutdown
 exit
 
