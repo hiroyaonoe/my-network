@@ -141,58 +141,142 @@ pveceph init --network 10.1.1.0/24 --cluster-network 10.1.2.0/24
 
 ### 2.3 Monitor（MON）の作成（全ノードで実行）
 
+#### mandolin1でMON作成
+
 ```bash
-# mandolin1でMON作成
+# mandolin1にSSH接続
 ssh root@10.1.1.11
-pveceph mon create
 
-# mandolin2でMON作成
+# MON作成を試す
+pveceph mon create
+```
+
+**エラーが出た場合（"unable to get monitor info"、"rados_connect failed"）**: 手動でMONを作成します。
+
+```bash
+# mandolin1で実行
+
+# 1. fsidを確認
+FSID=$(grep fsid /etc/pve/ceph.conf | awk '{print $3}')
+echo "FSID: $FSID"
+
+# 2. MONディレクトリを作成
+mkdir -p /var/lib/ceph/mon/ceph-mandolin1
+chown ceph:ceph /var/lib/ceph/mon/ceph-mandolin1
+
+# 3. monmapを作成
+monmaptool --create --add mandolin1 10.1.1.11 --fsid $FSID /tmp/monmap
+
+# 4. MONを手動で初期化
+ceph-mon --mkfs -i mandolin1 --monmap /tmp/monmap --keyring /etc/pve/priv/ceph.mon.keyring
+
+# 5. 所有者を修正
+chown -R ceph:ceph /var/lib/ceph/mon/ceph-mandolin1
+
+# 6. MONサービスを有効化して起動
+systemctl enable ceph-mon@mandolin1
+systemctl start ceph-mon@mandolin1
+
+# 7. 状態確認
+systemctl status ceph-mon@mandolin1
+sleep 5
+ceph -s
+```
+
+#### mandolin2, mandolin3でMON作成
+
+mandolin1のMONが起動したら、mandolin2とmandolin3でもMONを作成します。
+
+```bash
+# mandolin2で実行
 ssh root@10.1.1.12
-pveceph mon create
 
-# mandolin3でMON作成
+rm -rf /var/lib/ceph/mon/ceph-mandolin2
+FSID=$(grep fsid /etc/pve/ceph.conf | awk '{print $3}')
+mkdir -p /var/lib/ceph/mon/ceph-mandolin2
+ceph mon getmap -o /tmp/monmap
+ceph-mon --mkfs -i mandolin2 --monmap /tmp/monmap --keyring /etc/pve/priv/ceph.mon.keyring
+chown -R ceph:ceph /var/lib/ceph/mon/ceph-mandolin2
+systemctl enable ceph-mon@mandolin2
+systemctl start ceph-mon@mandolin2
+systemctl status ceph-mon@mandolin2
+
+# mandolin3で実行
 ssh root@10.1.1.13
-pveceph mon create
 
-# MON状態の確認
+rm -rf /var/lib/ceph/mon/ceph-mandolin3
+FSID=$(grep fsid /etc/pve/ceph.conf | awk '{print $3}')
+mkdir -p /var/lib/ceph/mon/ceph-mandolin3
+ceph mon getmap -o /tmp/monmap
+ceph-mon --mkfs -i mandolin3 --monmap /tmp/monmap --keyring /etc/pve/priv/ceph.mon.keyring
+chown -R ceph:ceph /var/lib/ceph/mon/ceph-mandolin3
+systemctl enable ceph-mon@mandolin3
+systemctl start ceph-mon@mandolin3
+systemctl status ceph-mon@mandolin3
+```
+
+#### MON状態の確認
+
+```bash
+# いずれかのノードで実行
+ceph -s
 ceph mon stat
 
 # 期待される出力:
-# e3: 3 mons at {mandolin1=10.1.1.11:6789/0,mandolin2=10.1.1.12:6789/0,mandolin3=10.1.1.13:6789/0}
+# mon: 3 daemons, quorum mandolin1,mandolin2,mandolin3
 ```
 
 ### 2.4 Manager（MGR）の作成（全ノードで実行）
 
 ```bash
-# mandolin1でMGR作成
+# mandolin1でMGR作成を試す
 ssh root@10.1.1.11
 pveceph mgr create
+```
 
-# mandolin2でMGR作成
+**エラーが出た場合（"unable to open file"、keyringエラー）**: 手動でMGRを作成します。
+
+```bash
+# mandolin1で実行
+mkdir -p /var/lib/ceph/mgr/ceph-mandolin1
+chown ceph:ceph /var/lib/ceph/mgr/ceph-mandolin1
+ceph auth get-or-create mgr.mandolin1 mon 'allow profile mgr' osd 'allow *' mds 'allow *' -o /var/lib/ceph/mgr/ceph-mandolin1/keyring
+chown ceph:ceph /var/lib/ceph/mgr/ceph-mandolin1/keyring
+systemctl enable ceph-mgr@mandolin1
+systemctl start ceph-mgr@mandolin1
+systemctl status ceph-mgr@mandolin1
+sleep 3
+ceph -s
+
+# mandolin2で実行
 ssh root@10.1.1.12
-pveceph mgr create
+mkdir -p /var/lib/ceph/mgr/ceph-mandolin2
+chown ceph:ceph /var/lib/ceph/mgr/ceph-mandolin2
+ceph auth get-or-create mgr.mandolin2 mon 'allow profile mgr' osd 'allow *' mds 'allow *' -o /var/lib/ceph/mgr/ceph-mandolin2/keyring
+chown ceph:ceph /var/lib/ceph/mgr/ceph-mandolin2/keyring
+systemctl enable ceph-mgr@mandolin2
+systemctl start ceph-mgr@mandolin2
+systemctl status ceph-mgr@mandolin2
 
-# mandolin3でMGR作成
+# mandolin3で実行
 ssh root@10.1.1.13
-pveceph mgr create
+mkdir -p /var/lib/ceph/mgr/ceph-mandolin3
+chown ceph:ceph /var/lib/ceph/mgr/ceph-mandolin3
+ceph auth get-or-create mgr.mandolin3 mon 'allow profile mgr' osd 'allow *' mds 'allow *' -o /var/lib/ceph/mgr/ceph-mandolin3/keyring
+chown ceph:ceph /var/lib/ceph/mgr/ceph-mandolin3/keyring
+systemctl enable ceph-mgr@mandolin3
+systemctl start ceph-mgr@mandolin3
+systemctl status ceph-mgr@mandolin3
+```
 
-# MGR状態の確認
-ceph mgr stat
+#### MGR状態の確認
+
+```bash
+# いずれかのノードで実行
+ceph -s
 
 # 期待される出力:
-# {
-#     "epoch": ...,
-#     "available": true,
-#     "active_name": "mandolin1",
-#     "standby": [
-#         {
-#             "name": "mandolin2"
-#         },
-#         {
-#             "name": "mandolin3"
-#         }
-#     ]
-# }
+# mgr: mandolin1(active, since 10s), standbys: mandolin2, mandolin3
 ```
 
 ### 2.5 OSD（ストレージ）の作成（全ノードで実行）
@@ -205,7 +289,7 @@ ceph mgr stat
 # 各ノードで実行
 lsblk
 
-# 期待される出力例:
+# 期待される出力例（SATA SSDの場合）:
 # NAME   MAJ:MIN RM   SIZE RO TYPE MOUNTPOINTS
 # sda      8:0    0 476.9G  0 disk           ← 512GB SSD（Proxmox OS用、使用しない）
 # ├─sda1   8:1    0  1007K  0 part
@@ -213,11 +297,27 @@ lsblk
 # └─sda3   8:3    0 475.9G  0 part
 # sdb      8:16   0 931.5G  0 disk           ← 1TB SSD（Ceph OSD用、これを使用）
 
+# NVMe SSDの場合は /dev/nvme0n1, /dev/nvme1n1 などになります
+# nvme0n1: OS用（使用しない）
+# nvme1n1: Ceph OSD用（これを使用）
+
 # ディスクが空かどうか確認
 pvesm status
 
-# sdb（1TB SSD）にパーティションがないことを確認
-fdisk -l /dev/sdb
+# OSD用ディスクにパーティションがないことを確認
+fdisk -l /dev/sdb  # または /dev/nvme1n1
+```
+
+#### bootstrap-osd keyringの準備（全ノードで実行）
+
+OSD作成前に、bootstrap-osd keyringを準備します。
+
+```bash
+# 全ノード（mandolin1, mandolin2, mandolin3）で実行
+mkdir -p /var/lib/ceph/bootstrap-osd
+chown ceph:ceph /var/lib/ceph/bootstrap-osd
+ceph auth get client.bootstrap-osd -o /var/lib/ceph/bootstrap-osd/ceph.keyring
+chown ceph:ceph /var/lib/ceph/bootstrap-osd/ceph.keyring
 ```
 
 #### OSDの作成
@@ -225,15 +325,15 @@ fdisk -l /dev/sdb
 ```bash
 # mandolin1で実行
 ssh root@10.1.1.11
-pveceph osd create /dev/sdb
+pveceph osd create /dev/sdb  # または /dev/nvme1n1（環境に合わせて変更）
 
 # mandolin2で実行
 ssh root@10.1.1.12
-pveceph osd create /dev/sdb
+pveceph osd create /dev/sdb  # または /dev/nvme1n1
 
 # mandolin3で実行
 ssh root@10.1.1.13
-pveceph osd create /dev/sdb
+pveceph osd create /dev/sdb  # または /dev/nvme1n1
 
 # 作成時間: 各ノード約2〜5分
 
@@ -242,13 +342,13 @@ ceph osd tree
 
 # 期待される出力:
 # ID  CLASS  WEIGHT   TYPE NAME           STATUS  REWEIGHT  PRI-AFF
-# -1         2.73196  root default
-# -3         0.91065      host mandolin1
-#  0    hdd  0.91065          osd.0           up   1.00000  1.00000
-# -5         0.91065      host mandolin2
-#  1    hdd  0.91065          osd.1           up   1.00000  1.00000
-# -7         0.91065      host mandolin3
-#  2    hdd  0.91065          osd.2           up   1.00000  1.00000
+# -1         2.79446  root default
+# -3         0.93149      host mandolin1
+#  0    ssd  0.93149          osd.0           up   1.00000  1.00000
+# -5         0.93149      host mandolin2
+#  1    ssd  0.93149          osd.1           up   1.00000  1.00000
+# -7         0.93149      host mandolin3
+#  2    ssd  0.93149          osd.2           up   1.00000  1.00000
 ```
 
 ### 2.6 ストレージプールの作成
@@ -273,7 +373,34 @@ pveceph pool create vm-pool --add_storages
 ceph osd pool ls detail
 
 # 期待される出力:
-# pool 1 'vm-pool' replicated size 3 min_size 2 ...
+# pool 2 'vm-pool' replicated size 3 min_size 2 ... pg_num 128
+```
+
+#### PG数の最適化（推奨）
+
+デフォルトのPG数（128）は小規模クラスタには多すぎる場合があります。最適化しましょう。
+
+**PG（Placement Group）とは**: Cephがデータを効率的に管理するための論理的なグループ。多すぎるとメモリ/CPU使用量が増加し、少なすぎるとデータ分散が不均一になります。
+
+**推奨PG数の計算**:
+```
+PG数 = (OSD数 × 100) / レプリカ数
+     = (3 × 100) / 3
+     = 100
+
+小規模クラスタでは64が推奨
+```
+
+```bash
+# PG数を64に最適化
+ceph osd pool set vm-pool pg_num 64
+
+# 完了まで1〜2分待つ（PGのマージ処理）
+sleep 60
+ceph -s
+
+# 期待される出力:
+# pgs: 65 active+clean  ← 全てactive+clean
 ```
 
 ### 2.7 Proxmoxストレージの確認
@@ -429,6 +556,71 @@ pmxcfs status
 
 # 設定ファイルの確認
 cat /etc/pve/corosync.conf
+```
+
+### 4.5 pveceph mon create が失敗する
+
+**エラー**: `unable to get monitor info from DNS SRV`, `rados_connect failed`
+
+**原因**: 最初のMON作成時に、まだ接続すべきMONが存在しない
+
+**解決策**: セクション2.3の手動手順を使用してMONを作成
+
+### 4.6 pveceph mgr create が失敗する
+
+**エラー**: `unable to open file`, keyringエラー
+
+**原因**: MGRディレクトリまたはkeyringが正しく作成されない
+
+**解決策**: セクション2.4の手動手順を使用してMGRを作成
+
+### 4.7 pveceph osd create が失敗する
+
+**エラー**: `unable to open file '/var/lib/ceph/bootstrap-osd/ceph.keyring'`
+
+**原因**: bootstrap-osd keyringが存在しない
+
+**解決策**:
+```bash
+# bootstrap-osd keyringを作成
+mkdir -p /var/lib/ceph/bootstrap-osd
+chown ceph:ceph /var/lib/ceph/bootstrap-osd
+ceph auth get client.bootstrap-osd -o /var/lib/ceph/bootstrap-osd/ceph.keyring
+chown ceph:ceph /var/lib/ceph/bootstrap-osd/ceph.keyring
+
+# 再度OSD作成
+pveceph osd create /dev/sdb  # または環境に合わせてデバイス名を変更
+```
+
+### 4.8 Cephを完全に再インストールする
+
+設定が複雑になりすぎた場合、Cephを完全にアンインストールして再インストールできます。
+
+```bash
+# 全ノード（mandolin1, mandolin2, mandolin3）で実行
+
+# 1. すべてのCephサービスを停止
+systemctl stop ceph.target
+systemctl stop ceph-mon.target
+systemctl stop ceph-mgr.target
+systemctl stop ceph-osd.target
+systemctl stop ceph-crash
+
+# 2. Cephサービスを無効化
+systemctl disable ceph-mon@$(hostname) 2>/dev/null || true
+systemctl disable ceph-mgr@$(hostname) 2>/dev/null || true
+
+# 3. Cephパッケージをアンインストール
+apt purge -y ceph ceph-common ceph-mds ceph-mgr ceph-mon ceph-osd
+
+# 4. 設定ファイルとデータをすべて削除
+rm -rf /var/lib/ceph/*
+rm -rf /etc/ceph/*
+rm -f /etc/pve/ceph.conf
+rm -f /etc/pve/priv/ceph.*
+
+# 5. 再インストール
+# セクション2.1から再開
 ```
 
 ## 5. Web UIでの操作
