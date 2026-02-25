@@ -354,7 +354,7 @@ interface Vlan103
 ! WAN側ルータ接続 (Routed Port)
 interface GigabitEthernet0/1
  no switchport
- ip address 10.0.1.1 255.255.255.0
+ ip address 10.0.1.1 255.255.0.0
  no shutdown
 
 ! 空きポート
