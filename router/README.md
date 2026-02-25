@@ -27,8 +27,8 @@ copy running-config startup-config
 ### 方法2: コンソールケーブル経由
 
 ```bash
-# 1. コンソールケーブルで接続（115200 baud）
-screen /dev/tty.usbserial 115200
+# 1. コンソールケーブルで接続（9600 baud）
+screen /dev/tty.usbserial 9600
 # または
 minicom -D /dev/tty.usbserial
 
@@ -68,7 +68,7 @@ copy running-config startup-config
 
 ### クイックスタート
 
-1. **コンソール接続** (115200 baud)
+1. **コンソール接続** (9600 baud)
 2. **`initial-setup.conf` を投入** (パスワード部分は書き換え)
 3. **PCをGi0/2に接続** (IP: 10.1.1.100/24)
 4. **SSH接続確認** (`ssh admin@10.1.1.1`)

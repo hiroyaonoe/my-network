@@ -14,12 +14,12 @@
 
 ```bash
 # macOS/Linux
-screen /dev/tty.usbserial 115200
+screen /dev/tty.usbserial 9600
 
 # または minicom
-minicom -D /dev/tty.usbserial -b 115200
+minicom -D /dev/tty.usbserial -b 9600
 
-# Windows: Tera Term等で COM ポート, 115200 baud
+# Windows: Tera Term等で COM ポート, 9600 baud
 ```
 
 ### 2. 初期設定の投入
