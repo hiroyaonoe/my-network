@@ -236,6 +236,8 @@ auto vmbr0
 iface vmbr0 inet static
     address 10.1.1.1x/24       # 各ノードに応じて .11/.12/.13
     gateway 10.1.1.1
+    dns-nameservers 10.0.0.1
+    dns-search internal.onoe.dev
     bridge-ports bond0
     bridge-stp off
     bridge-fd 0
