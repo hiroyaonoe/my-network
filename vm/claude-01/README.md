@@ -12,7 +12,7 @@ Claude Code開発環境（Ubuntu 24.04 LTS）
 | ゲートウェイ | 10.2.0.97 |
 | DNS | 10.0.0.1 |
 | VLAN | 103（AI動作用） |
-| Proxmoxノード | mandolin1 |
+| Proxmoxノード | mandolin2 |
 
 ## ハードウェア構成
 

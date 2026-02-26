@@ -25,7 +25,7 @@
     "iso": "ubuntu-24.04.1-live-server-amd64.iso"
   },
   "proxmox": {
-    "node": "mandolin1",
+    "node": "mandolin2",
     "agent_enabled": true,
     "start_at_boot": false
   },

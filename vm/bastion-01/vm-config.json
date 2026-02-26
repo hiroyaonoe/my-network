@@ -27,7 +27,7 @@
   "proxmox": {
     "node": "mandolin1",
     "agent_enabled": true,
-    "start_at_boot": false
+    "start_at_boot": true
   },
   "metadata": {
     "purpose": "SSH踏み台サーバー、管理ツール実行環境",
