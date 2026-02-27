@@ -1,0 +1,33 @@
+# Cilium Helm values for K8s cluster on VLAN 102
+
+# ルーティング
+routingMode: native
+autoDirectNodeRoutes: true
+ipv4NativeRoutingCIDR: "10.3.0.0/16"
+enableIPv4Masquerade: true
+
+# kube-proxy 代替
+kubeProxyReplacement: true
+k8sServiceHost: "10.2.0.94"
+k8sServicePort: 6443
+
+# IPAM
+ipam:
+  mode: kubernetes
+
+# L2 Announcement (LB VIP 用)
+l2announcements:
+  enabled: true
+
+# ExternalIPs
+externalIPs:
+  enabled: true
+
+# API rate limit (L2 announcement が Lease を頻繁に更新するため)
+k8sClientRateLimit:
+  qps: 50
+  burst: 100
+
+# Operator
+operator:
+  replicas: 1

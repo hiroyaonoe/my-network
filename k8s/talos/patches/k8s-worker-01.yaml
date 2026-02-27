@@ -1,0 +1,14 @@
+machine:
+  network:
+    hostname: k8s-worker-01
+    interfaces:
+      - interface: eth0
+        addresses:
+          - 10.2.0.69/27
+        routes:
+          - network: 0.0.0.0/0
+            gateway: 10.2.0.65
+    nameservers:
+      - 10.0.0.1
+  install:
+    disk: /dev/sda

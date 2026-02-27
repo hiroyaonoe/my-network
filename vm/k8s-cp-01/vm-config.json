@@ -1,0 +1,41 @@
+{
+  "vm_id": 102001,
+  "vm_name": "k8s-cp-01",
+  "vlan_tag": 102,
+  "network": {
+    "ip_address": "10.2.0.66/27",
+    "gateway": "10.2.0.65",
+    "dns": "10.0.0.1",
+    "search_domain": "internal.onoe.dev"
+  },
+  "hardware": {
+    "cpu_cores": 2,
+    "cpu_type": "host",
+    "memory_mb": 4096,
+    "ballooning": {
+      "enabled": true,
+      "minimum_mb": 1024
+    },
+    "disk_gb": 32,
+    "storage": "vm-pool",
+    "disk_options": {
+      "discard": true,
+      "ssd_emulation": true
+    }
+  },
+  "os": {
+    "type": "Talos Linux",
+    "image": "nocloud-amd64.raw"
+  },
+  "proxmox": {
+    "node": "mandolin1",
+    "agent_enabled": false,
+    "start_at_boot": true
+  },
+  "metadata": {
+    "purpose": "Kubernetes control-plane ノード",
+    "description": "Talos Linux ベースの HA K8s クラスタ control-plane。etcd + API Server を実行。",
+    "created_at": "2026-02-27",
+    "created_by": "admin"
+  }
+}

@@ -138,11 +138,12 @@ Proxmox Web UI: `https://10.1.1.1x:8006`
 
 | 用途 | CIDR | 備考 |
 |------|------|------|
-| Pod Network | 10.3.0.0/16 | CNI (Calico, Cilium等) が使用 |
-| Service Network | 10.4.0.0/16 | Kubernetes Service CIDR |
-| LoadBalancer | 10.5.0.0/24 | MetalLB等で使用 |
+| Pod Network | 10.3.0.0/16 | Cilium IPAM (kubernetes mode), per-node /24 |
+| Service Network | 10.4.0.0/16 | Kubernetes ClusterIP Service CIDR |
+| LoadBalancer VIP | 10.5.0.0/24 | CiliumLoadBalancerIPPool + L2 Announcement |
 
-> k8sクラスタ内部ネットワークの詳細はクラスタ構築時に決定する。
+> Pod Network と Service Network は K8s クラスタ内部でのみ使用され、外部からは直接到達不可。
+> LoadBalancer VIP は Cilium L2 Announcement により VLAN 102 上で ARP 応答し、Catalyst のインターフェースルートで到達可能。
 
 ### 3.4 ルーティング設計
 
@@ -163,11 +164,13 @@ default         → 10.0.0.1 (WAN側ルータ)
 10.1.1.0/24     → VLAN 10 (directly connected, 管理)
 10.1.2.0/24     → VLAN 20 (directly connected, Ceph)
 10.2.x.x/27     → VLAN 100-227 (SVIが存在するVLANのみ、directly connected)
+10.5.0.0/24     → Vlan102 (インターフェースルート, K8s LB VIP)
 ```
 
 > SVI間ルーティングにより、SVIが定義された全VLANは相互に通信可能。
 > VM用VLANの追加時はSVIを作成するだけでconnected routeが自動生成される。
 > 必要に応じてACLでVLAN間のアクセス制御を実施する。
+> 10.5.0.0/24 宛のパケットは VLAN 102 上で ARP を発行し、Cilium L2 Announcement のリーダーノードが応答する。
 
 ### 3.5 Bonding (LACP) 設計
 
@@ -430,10 +433,14 @@ interface Port-channel3
 
 ```
 ip route 0.0.0.0 0.0.0.0 10.0.0.1
+
+! K8s LoadBalancer VIP → VLAN 102 上で ARP (Cilium L2 Announcement が応答)
+ip route 10.5.0.0 255.255.255.0 Vlan102
 ```
 
 > Connected routeにより各SVI配下のサブネットは自動的にルーティングされる。
 > すべてのネットワークが10.0.0.0/8内に統一されているため、WAN側ルータでの追加ルート設定は不要。
+> 10.5.0.0/24 のインターフェースルートにより、K8s LoadBalancer VIP への通信が VLAN 102 上の Cilium L2 Announcement で処理される。
 
 ## 6. 制約事項・注意点
 
@@ -505,7 +512,67 @@ qm config <vmid> | grep net0
 > VM内のOS設定では、通常のイーサネットとして静的IPまたはDHCP（別途構築する場合）を設定する。
 > ゲートウェイは各VLANのSVI (10.2.0.1, 10.2.0.33, 10.2.0.65, 10.2.0.97...) を指定。
 
-## 8. 将来の拡張案
+## 8. K8sクラスタ構成
+
+### 8.1 概要
+
+VLAN 102 (vm-k8s, 10.2.0.64/27) に Talos Linux ベースの HA Kubernetes クラスタを構築する。
+CNI には Cilium を採用し、Native Routing + L2 Announcement で LoadBalancer VIP を提供する。
+
+| 項目 | 値 |
+|------|-----|
+| OS | Talos Linux |
+| K8s バージョン | 1.32 |
+| CNI | Cilium (Native Routing) |
+| API Server VIP | 10.2.0.94 (Talos 内蔵 VIP) |
+| API Endpoint | `https://10.2.0.94:6443` |
+
+### 8.2 ノード構成
+
+| VM名 | VM ID | IP | Proxmoxノード | 役割 | vCPU | RAM | Disk |
+|-------|-------|-----|---------------|------|------|-----|------|
+| k8s-cp-01 | 102001 | 10.2.0.66 | mandolin1 | control-plane | 2 | 4GB | 32GB |
+| k8s-cp-02 | 102002 | 10.2.0.67 | mandolin2 | control-plane | 2 | 4GB | 32GB |
+| k8s-cp-03 | 102003 | 10.2.0.68 | mandolin3 | control-plane | 2 | 4GB | 32GB |
+| k8s-worker-01 | 102004 | 10.2.0.69 | mandolin1 | worker | 4 | 8GB | 64GB |
+| k8s-worker-02 | 102005 | 10.2.0.70 | mandolin2 | worker | 4 | 8GB | 64GB |
+| k8s-worker-03 | 102006 | 10.2.0.71 | mandolin3 | worker | 4 | 8GB | 64GB |
+
+> 各ノードで memory ballooning を有効化し、実使用量に応じた動的調整を行う。
+> ストレージ合計: 3x32 + 3x64 = 288GB (Ceph vm-pool 使用)
+
+### 8.3 ネットワーク方式
+
+```
+[他 VLAN のクライアント]
+    |
+    | dst: 10.5.0.x (LB VIP)
+    v
+[Catalyst SVI Vlan102]
+    | ip route 10.5.0.0/24 Vlan102 → ARP for 10.5.0.x on VLAN 102
+    v
+[Cilium L2 Announcement]  ← リーダーノードが ARP 応答
+    |
+    v
+[K8s Service → Backend Pod]
+```
+
+- **Pod 間通信**: Cilium `autoDirectNodeRoutes` により各ノードのカーネルルーティングテーブルに直接ルート挿入 (全ノード同一 L2 のため BGP 不要)
+- **LB VIP 公開**: Cilium L2 Announcement (ARP 応答) + Catalyst インターフェースルート。ノード障害時は Gratuitous ARP でフェイルオーバー
+- **Pod の外部通信**: SNAT (マスカレード、Pod は Node IP で外部に出る)
+- **kube-proxy**: 無効化 (Cilium で代替)
+
+### 8.4 リソース見積もり (オーバーコミット)
+
+| Proxmoxノード | 既存VM | K8s VM | 合計 RAM | オーバーコミット比 |
+|--------------|--------|--------|---------|-----------------|
+| mandolin1 | bastion-01 (8GB) | cp-01 (4GB) + worker-01 (8GB) | 20GB | ~1.8x |
+| mandolin2 | claude-01 (8GB) | cp-02 (4GB) + worker-02 (8GB) | 20GB | ~1.8x |
+| mandolin3 | なし | cp-03 (4GB) + worker-03 (8GB) | 12GB | ~1.1x |
+
+> Proxmox の memory ballooning で実使用量に応じた動的調整を行う。
+
+## 9. 将来の拡張案
 
 - **NIC増設・スイッチ更新**: マルチギガビット対応スイッチへの更新で帯域向上が可能。
 - **Ceph OSD追加**: 各ノードにSSDを追加することでCeph容量・性能を拡張可能。
