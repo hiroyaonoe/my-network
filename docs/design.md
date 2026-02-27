@@ -442,6 +442,22 @@ ip route 10.5.0.0 255.255.255.0 Vlan102
 > すべてのネットワークが10.0.0.0/8内に統一されているため、WAN側ルータでの追加ルート設定は不要。
 > 10.5.0.0/24 のインターフェースルートにより、K8s LoadBalancer VIP への通信が VLAN 102 上の Cilium L2 Announcement で処理される。
 
+### 5.7 DHCP サーバー
+
+```
+ip dhcp pool k8s-dhcp
+ network 10.2.0.64 255.255.255.224
+ default-router 10.2.0.65
+ dns-server 10.0.0.1
+ lease 0 1 0
+
+ip dhcp excluded-address 10.2.0.64 10.2.0.79
+ip dhcp excluded-address 10.2.0.91 10.2.0.95
+```
+
+> VLAN 102 (vm-k8s) 用の DHCP サーバー。Talos Linux VM の初回起動時に一時 IP (10.2.0.80〜90) を割り当てる。
+> Machine config 適用後、各 VM は静的 IP (10.2.0.66〜71) に切り替わる。
+
 ## 6. 制約事項・注意点
 
 1. **帯域制約**: WS-C3560CX-8PC-Sは1GbEポートのため、2.5GbE NICは1Gbpsでネゴシエーションされる。LACPにより最大2Gbps（ハッシュベース分散のため単一フローは1Gbps上限）。
