@@ -154,6 +154,12 @@ talosctl gen config k8s-cluster https://10.2.0.94:6443 \
 
 生成されるファイル (`controlplane.yaml`, `worker.yaml`, `talosconfig`) は `k8s/talos/` に配置され、シークレットを含むため Git 管理外。
 
+**Talos 1.12のマルチドキュメント形式について**:
+- パッチファイルは Talos 1.12 の新しいマルチドキュメント形式を使用
+- ネットワーク設定は `LinkConfig`, `Layer2VIPConfig`, `ResolverConfig` で構成
+- Hostname は `HostnameConfig` ドキュメントで設定
+- この形式は Talos 1.12 で推奨される設定方法
+
 ### 5. パッチ適用と Machine Config の結合
 
 `patches/` 配下のパッチを使用してノード別の設定を生成する。

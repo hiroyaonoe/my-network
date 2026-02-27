@@ -1,16 +1,26 @@
 machine:
-  network:
-    hostname: k8s-cp-02
-    interfaces:
-      - interface: eth0
-        addresses:
-          - 10.2.0.67/27
-        routes:
-          - network: 0.0.0.0/0
-            gateway: 10.2.0.65
-        vip:
-          ip: 10.2.0.94
-    nameservers:
-      - 10.0.0.1
   install:
     disk: /dev/sda
+---
+apiVersion: v1alpha1
+kind: LinkConfig
+name: eth0
+up: true
+addresses:
+  - address: 10.2.0.67/27
+routes:
+  - gateway: 10.2.0.65
+---
+apiVersion: v1alpha1
+kind: Layer2VIPConfig
+name: 10.2.0.94
+link: eth0
+---
+apiVersion: v1alpha1
+kind: ResolverConfig
+nameservers:
+  - address: 10.0.0.1
+---
+apiVersion: v1alpha1
+kind: HostnameConfig
+hostname: k8s-cp-02
