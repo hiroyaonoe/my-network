@@ -538,7 +538,7 @@ CNI には Cilium を採用し、Native Routing + L2 Announcement で LoadBalanc
 | 項目 | 値 |
 |------|-----|
 | OS | Talos Linux |
-| K8s バージョン | 1.32 |
+| K8s バージョン | 1.35.2 |
 | CNI | Cilium (Native Routing) |
 | API Server VIP | 10.2.0.94 (Talos 内蔵 VIP) |
 | API Endpoint | `https://10.2.0.94:6443` |

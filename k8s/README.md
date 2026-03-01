@@ -7,7 +7,7 @@ VLAN 102 (vm-k8s, 10.2.0.64/27) 上の HA Kubernetes クラスタ。
 | 項目 | 値 |
 |------|-----|
 | OS | Talos Linux |
-| K8s バージョン | 1.32 |
+| K8s バージョン | 1.35.2 |
 | CNI | Cilium (Native Routing + L2 Announcement) |
 | API Server VIP | 10.2.0.94 |
 | API Endpoint | `https://10.2.0.94:6443` |
@@ -58,24 +58,25 @@ DHCP 範囲: 10.2.0.80〜90 (11 個、初回起動用)
 
 ### 2. Talos イメージの準備
 
-Talos `nocloud` AMD64 イメージ (raw.xz) をダウンロードし、解凍して Proxmox にアップロードする。
+Talos `nocloud` AMD64 ISO をダウンロードし、各 Proxmox ノードにアップロードする。
+
+> **重要**: nocloud qcow2/raw イメージではなく **ISO** を使用する。ISO からブートした場合のみ `machine.install` に従ったディスクインストールが行われる。qcow2/raw は既にインストール済みのイメージであり、ネットワーク設定が正しく反映されない場合がある。
 
 ```bash
-# イメージダウンロード
-wget https://factory.talos.dev/image/<schematic-id>/v1.9/nocloud-amd64.raw.xz
+# ISO ダウンロード
+wget https://factory.talos.dev/image/<schematic-id>/v1.12.4/nocloud-amd64.iso
 
-# 解凍
-xz -d nocloud-amd64.raw.xz
-
-# Proxmox にアップロード (各ノードの local ストレージ)
-scp nocloud-amd64.raw root@10.1.1.11:/var/lib/vz/template/
-scp nocloud-amd64.raw root@10.1.1.12:/var/lib/vz/template/
-scp nocloud-amd64.raw root@10.1.1.13:/var/lib/vz/template/
+# Proxmox にアップロード (各ノードの ISO ストレージ)
+scp nocloud-amd64.iso root@10.1.1.11:/var/lib/vz/template/iso/
+scp nocloud-amd64.iso root@10.1.1.12:/var/lib/vz/template/iso/
+scp nocloud-amd64.iso root@10.1.1.13:/var/lib/vz/template/iso/
 ```
 
 ### 3. VM 作成 (各 Proxmox ノードで実行)
 
 `vm/k8s-*/vm-config.json` の内容に従い、CLI で VM を作成する。
+
+> **重要**: SCSI コントローラは `virtio-scsi-pci` を使用すること (Talos 公式推奨)。デフォルトの LSI や VirtIO SCSI Single ではディスクが認識されない場合がある。
 
 ```bash
 # k8s-cp-01 (mandolin1 上で実行)
@@ -83,20 +84,20 @@ ssh root@10.1.1.11
 
 qm create 102001 --name k8s-cp-01 \
   --cpu cputype=host --cores 2 --memory 4096 --balloon 1024 \
+  --scsihw virtio-scsi-pci \
   --net0 virtio,bridge=vmbr0,tag=102 \
-  --boot order=scsi0 --onboot 1
-
-qm importdisk 102001 /var/lib/vz/template/nocloud-amd64.raw vm-pool
-qm set 102001 --scsi0 vm-pool:vm-102001-disk-0,discard=on,ssd=1
+  --ide2 local:iso/nocloud-amd64.iso,media=cdrom \
+  --scsi0 vm-pool:32,discard=on,ssd=1 \
+  --boot order='ide2;scsi0' --onboot 1
 
 # k8s-worker-01 (同じノード上)
 qm create 102004 --name k8s-worker-01 \
   --cpu cputype=host --cores 4 --memory 8192 --balloon 2048 \
+  --scsihw virtio-scsi-pci \
   --net0 virtio,bridge=vmbr0,tag=102 \
-  --boot order=scsi0 --onboot 1
-
-qm importdisk 102004 /var/lib/vz/template/nocloud-amd64.raw vm-pool
-qm set 102004 --scsi0 vm-pool:vm-102004-disk-0,discard=on,ssd=1
+  --ide2 local:iso/nocloud-amd64.iso,media=cdrom \
+  --scsi0 vm-pool:64,discard=on,ssd=1 \
+  --boot order='ide2;scsi0' --onboot 1
 ```
 
 ```bash
@@ -105,19 +106,19 @@ ssh root@10.1.1.12
 
 qm create 102002 --name k8s-cp-02 \
   --cpu cputype=host --cores 2 --memory 4096 --balloon 1024 \
+  --scsihw virtio-scsi-pci \
   --net0 virtio,bridge=vmbr0,tag=102 \
-  --boot order=scsi0 --onboot 1
-
-qm importdisk 102002 /var/lib/vz/template/nocloud-amd64.raw vm-pool
-qm set 102002 --scsi0 vm-pool:vm-102002-disk-0,discard=on,ssd=1
+  --ide2 local:iso/nocloud-amd64.iso,media=cdrom \
+  --scsi0 vm-pool:32,discard=on,ssd=1 \
+  --boot order='ide2;scsi0' --onboot 1
 
 qm create 102005 --name k8s-worker-02 \
   --cpu cputype=host --cores 4 --memory 8192 --balloon 2048 \
+  --scsihw virtio-scsi-pci \
   --net0 virtio,bridge=vmbr0,tag=102 \
-  --boot order=scsi0 --onboot 1
-
-qm importdisk 102005 /var/lib/vz/template/nocloud-amd64.raw vm-pool
-qm set 102005 --scsi0 vm-pool:vm-102005-disk-0,discard=on,ssd=1
+  --ide2 local:iso/nocloud-amd64.iso,media=cdrom \
+  --scsi0 vm-pool:64,discard=on,ssd=1 \
+  --boot order='ide2;scsi0' --onboot 1
 ```
 
 ```bash
@@ -126,19 +127,19 @@ ssh root@10.1.1.13
 
 qm create 102003 --name k8s-cp-03 \
   --cpu cputype=host --cores 2 --memory 4096 --balloon 1024 \
+  --scsihw virtio-scsi-pci \
   --net0 virtio,bridge=vmbr0,tag=102 \
-  --boot order=scsi0 --onboot 1
-
-qm importdisk 102003 /var/lib/vz/template/nocloud-amd64.raw vm-pool
-qm set 102003 --scsi0 vm-pool:vm-102003-disk-0,discard=on,ssd=1
+  --ide2 local:iso/nocloud-amd64.iso,media=cdrom \
+  --scsi0 vm-pool:32,discard=on,ssd=1 \
+  --boot order='ide2;scsi0' --onboot 1
 
 qm create 102006 --name k8s-worker-03 \
   --cpu cputype=host --cores 4 --memory 8192 --balloon 2048 \
+  --scsihw virtio-scsi-pci \
   --net0 virtio,bridge=vmbr0,tag=102 \
-  --boot order=scsi0 --onboot 1
-
-qm importdisk 102006 /var/lib/vz/template/nocloud-amd64.raw vm-pool
-qm set 102006 --scsi0 vm-pool:vm-102006-disk-0,discard=on,ssd=1
+  --ide2 local:iso/nocloud-amd64.iso,media=cdrom \
+  --scsi0 vm-pool:64,discard=on,ssd=1 \
+  --boot order='ide2;scsi0' --onboot 1
 ```
 
 ### 4. Machine Config 生成
@@ -147,7 +148,7 @@ qm set 102006 --scsi0 vm-pool:vm-102006-disk-0,discard=on,ssd=1
 cd k8s/talos  # 作業ディレクトリに移動
 
 talosctl gen config k8s-cluster https://10.2.0.94:6443 \
-  --kubernetes-version 1.32 \
+  --kubernetes-version 1.35.2 \
   --with-docs=false \
   --with-examples=false
 ```
@@ -201,60 +202,52 @@ talosctl machineconfig patch worker.yaml \
   --output k8s-worker-03.yaml
 ```
 
-### 6. VM 起動
+### 6. VM 起動と Machine Config 適用
 
-全 6 台の VM を起動する。
+ISO からブートし、machine config を適用してディスクにインストールする。
 
-**Proxmox Web UI の場合:**
-1. 各 VM (102001〜102006) を選択
-2. **Start** をクリック
+> **フロー**: ISO ブート → DHCP で一時 IP 取得 → ブート順序をディスク優先に変更 → `apply-config` → ディスクにインストール → 自動リブート → 静的 IP で起動
 
-**CLI の場合:**
+**手順 (各 VM で繰り返す):**
+
 ```bash
-# 各 Proxmox ノードで実行
-ssh root@10.1.1.11
-qm start 102001  # k8s-cp-01
-qm start 102004  # k8s-worker-01
+# 1. VM 起動 (ISO からブート)
+qm start <VMID>
 
-ssh root@10.1.1.12
-qm start 102002  # k8s-cp-02
-qm start 102005  # k8s-worker-02
+# 2. DHCP IP を確認 (約 30 秒待機)
+#    Catalyst: show ip dhcp binding
+#    または Proxmox コンソールで確認
 
-ssh root@10.1.1.13
-qm start 102003  # k8s-cp-03
-qm start 102006  # k8s-worker-03
+# 3. ブート順序をディスク優先に変更 (リブート後に ISO から起動しないように)
+qm set <VMID> --boot order='scsi0;ide2'
+
+# 4. machine config を適用 (インストール→自動リブート)
+talosctl apply-config --insecure -n <DHCP_IP> -f <node>.yaml
+
+# 5. 静的 IP で起動確認 (約 60 秒待機)
+ping -c 3 <STATIC_IP>
 ```
 
-起動後、Talos が Catalyst DHCP から一時 IP (10.2.0.80〜90) を取得するまで待つ (約 30 秒)。
-
-**DHCP IP の確認:**
-```bash
-# Catalyst でリース確認
-show ip dhcp binding
-```
-
-または Proxmox Web UI の VM Console で確認。
-
-### 7. Machine Config 適用
-
-DHCP で取得した一時 IP に対して machine config を適用する。
-
+**具体例:**
 ```bash
 # k8s/talos ディレクトリで実行
 
-# DHCP で取得した IP を確認後、各 VM に machine config を適用
-# 例: k8s-cp-01 が 10.2.0.80 を取得した場合
+# k8s-cp-01 (DHCP IP が 10.2.0.80 の場合)
+qm set 102001 --boot order='scsi0;ide2'
 talosctl apply-config --insecure -n 10.2.0.80 -f k8s-cp-01.yaml
-talosctl apply-config --insecure -n 10.2.0.81 -f k8s-cp-02.yaml
-talosctl apply-config --insecure -n 10.2.0.82 -f k8s-cp-03.yaml
-talosctl apply-config --insecure -n 10.2.0.83 -f k8s-worker-01.yaml
-talosctl apply-config --insecure -n 10.2.0.84 -f k8s-worker-02.yaml
-talosctl apply-config --insecure -n 10.2.0.85 -f k8s-worker-03.yaml
+# → 自動リブート後、10.2.0.66 で起動
+
+# 残りのノードも同様に apply-config
+talosctl apply-config --insecure -n <DHCP_IP> -f k8s-cp-02.yaml
+talosctl apply-config --insecure -n <DHCP_IP> -f k8s-cp-03.yaml
+talosctl apply-config --insecure -n <DHCP_IP> -f k8s-worker-01.yaml
+talosctl apply-config --insecure -n <DHCP_IP> -f k8s-worker-02.yaml
+talosctl apply-config --insecure -n <DHCP_IP> -f k8s-worker-03.yaml
 ```
 
-> **Note**: `--insecure` フラグは初回適用時のみ使用。Machine config 適用後、各 VM は静的 IP (10.2.0.66〜71) で再起動される。
+> **Note**: `--insecure` フラグは初回適用時のみ使用。`apply-config` 実行後、Talos がディスクにインストールし自動リブートする。リブート後は静的 IP (10.2.0.66〜71) で起動する。
 
-### 8. クラスタブートストラップ
+### 7. クラスタブートストラップ
 
 VM が静的 IP で再起動完了後、クラスタをブートストラップする。
 
@@ -272,7 +265,7 @@ talosctl bootstrap -n 10.2.0.66
 talosctl kubeconfig -n 10.2.0.94
 ```
 
-### 9. Cilium インストール
+### 8. Cilium インストール
 
 ```bash
 # Helm repo 追加
@@ -289,7 +282,7 @@ kubectl apply -f k8s/cilium/manifests/lb-ip-pool.yaml
 kubectl apply -f k8s/cilium/manifests/l2-announcement-policy.yaml
 ```
 
-### 10. Catalyst LB VIP ルート設定
+### 9. Catalyst LB VIP ルート設定
 
 LB VIP 用のインターフェースルートを追加する。
 

@@ -25,10 +25,11 @@
   },
   "os": {
     "type": "Talos Linux",
-    "image": "nocloud-amd64.raw"
+    "image": "nocloud-amd64.iso"
   },
   "proxmox": {
     "node": "mandolin2",
+    "scsi_controller": "virtio-scsi-pci",
     "agent_enabled": false,
     "start_at_boot": true
   },
