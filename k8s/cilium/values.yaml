@@ -1,5 +1,31 @@
 # Cilium Helm values for K8s cluster on VLAN 102
 
+# Talos Linux 固有設定
+# Talos は CAP_SYS_MODULE, CAP_SYS_BOOT を制限するため、明示的に capabilities を指定
+securityContext:
+  capabilities:
+    ciliumAgent:
+      - CHOWN
+      - KILL
+      - NET_ADMIN
+      - NET_RAW
+      - IPC_LOCK
+      - SYS_ADMIN
+      - SYS_RESOURCE
+      - DAC_OVERRIDE
+      - FOWNER
+      - SETGID
+      - SETUID
+    cleanCiliumState:
+      - NET_ADMIN
+      - SYS_ADMIN
+      - SYS_RESOURCE
+
+cgroup:
+  autoMount:
+    enabled: false
+  hostRoot: /sys/fs/cgroup
+
 # ルーティング
 routingMode: native
 autoDirectNodeRoutes: true
