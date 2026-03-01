@@ -19,9 +19,9 @@ VLAN 102 (vm-k8s, 10.2.0.64/27) 上の HA Kubernetes クラスタ。
 
 | VM名 | VM ID | IP | Proxmoxノード | 役割 | vCPU | RAM | Disk |
 |-------|-------|-----|---------------|------|------|-----|------|
-| k8s-cp-01 | 102001 | 10.2.0.66 | mandolin1 | control-plane | 2 | 4GB | 32GB |
-| k8s-cp-02 | 102002 | 10.2.0.67 | mandolin2 | control-plane | 2 | 4GB | 32GB |
-| k8s-cp-03 | 102003 | 10.2.0.68 | mandolin3 | control-plane | 2 | 4GB | 32GB |
+| k8s-cp-01 | 102001 | 10.2.0.66 | mandolin1 | control-plane | 4 | 8GB | 32GB |
+| k8s-cp-02 | 102002 | 10.2.0.67 | mandolin2 | control-plane | 4 | 8GB | 32GB |
+| k8s-cp-03 | 102003 | 10.2.0.68 | mandolin3 | control-plane | 4 | 8GB | 32GB |
 | k8s-worker-01 | 102004 | 10.2.0.69 | mandolin1 | worker | 4 | 8GB | 64GB |
 | k8s-worker-02 | 102005 | 10.2.0.70 | mandolin2 | worker | 4 | 8GB | 64GB |
 | k8s-worker-03 | 102006 | 10.2.0.71 | mandolin3 | worker | 4 | 8GB | 64GB |
@@ -83,7 +83,7 @@ scp nocloud-amd64.iso root@10.1.1.13:/var/lib/vz/template/iso/
 ssh root@10.1.1.11
 
 qm create 102001 --name k8s-cp-01 \
-  --cpu cputype=host --cores 2 --memory 4096 --balloon 1024 \
+  --cpu cputype=host --cores 4 --memory 8192 --balloon 0 \
   --scsihw virtio-scsi-pci \
   --net0 virtio,bridge=vmbr0,tag=102 \
   --ide2 local:iso/nocloud-amd64.iso,media=cdrom \
@@ -105,7 +105,7 @@ qm create 102004 --name k8s-worker-01 \
 ssh root@10.1.1.12
 
 qm create 102002 --name k8s-cp-02 \
-  --cpu cputype=host --cores 2 --memory 4096 --balloon 1024 \
+  --cpu cputype=host --cores 4 --memory 8192 --balloon 0 \
   --scsihw virtio-scsi-pci \
   --net0 virtio,bridge=vmbr0,tag=102 \
   --ide2 local:iso/nocloud-amd64.iso,media=cdrom \
@@ -126,7 +126,7 @@ qm create 102005 --name k8s-worker-02 \
 ssh root@10.1.1.13
 
 qm create 102003 --name k8s-cp-03 \
-  --cpu cputype=host --cores 2 --memory 4096 --balloon 1024 \
+  --cpu cputype=host --cores 4 --memory 8192 --balloon 0 \
   --scsihw virtio-scsi-pci \
   --net0 virtio,bridge=vmbr0,tag=102 \
   --ide2 local:iso/nocloud-amd64.iso,media=cdrom \
@@ -293,6 +293,39 @@ end
 copy running-config startup-config
 ```
 
+### 10. ArgoCD インストール
+
+```bash
+helm repo add argo https://argoproj.github.io/argo-helm
+helm repo update
+helm install argocd argo/argo-cd \
+  --namespace argocd --create-namespace \
+  --values k8s/argocd/values.yaml
+```
+
+### 11. ArgoCD 初期パスワード取得・ログイン
+
+```bash
+# 初期 admin パスワード
+kubectl -n argocd get secret argocd-initial-admin-secret \
+  -o jsonpath="{.data.password}" | base64 -d
+
+# ArgoCD LB IP 確認
+kubectl -n argocd get svc argocd-server
+# → EXTERNAL-IP: 10.5.0.1
+
+# ブラウザで http://10.5.0.1 にアクセス
+```
+
+### 12. Root Application 投入 (GitOps 開始)
+
+```bash
+kubectl apply -f k8s/argocd/bootstrap/root.yaml
+```
+
+> この時点で ArgoCD が Cilium・cilium-config・argocd (自身) を検出し、同期を開始する。
+> 手動 Helm install した状態と Git の定義が一致していれば、差分なく Synced 状態になる。
+
 ## 検証手順
 
 ```bash
@@ -322,6 +355,17 @@ ssh admin@10.2.0.2 'curl http://10.5.0.x'
 # テスト後のクリーンアップ
 kubectl delete svc nginx
 kubectl delete deployment nginx
+
+# 7. ArgoCD Pod 確認
+kubectl -n argocd get pods
+
+# 8. ArgoCD LB VIP 確認
+kubectl -n argocd get svc argocd-server
+# → EXTERNAL-IP: 10.5.0.1
+
+# 9. Application 同期状態確認
+kubectl -n argocd get applications
+# → root, cilium, cilium-config, argocd が全て Synced/Healthy
 ```
 
 ## ディレクトリ構成
@@ -347,11 +391,19 @@ k8s/
 │   ├── k8s-worker-01.yaml                 # 生成 (Git 管理外)
 │   ├── k8s-worker-02.yaml                 # 生成 (Git 管理外)
 │   └── k8s-worker-03.yaml                 # 生成 (Git 管理外)
-└── cilium/
-    ├── values.yaml                         # Helm values
-    └── manifests/
-        ├── lb-ip-pool.yaml                # CiliumLoadBalancerIPPool
-        └── l2-announcement-policy.yaml    # CiliumL2AnnouncementPolicy
+├── cilium/
+│   ├── values.yaml                         # Helm values
+│   └── manifests/
+│       ├── lb-ip-pool.yaml                # CiliumLoadBalancerIPPool
+│       └── l2-announcement-policy.yaml    # CiliumL2AnnouncementPolicy
+└── argocd/
+    ├── values.yaml                         # ArgoCD Helm values
+    ├── bootstrap/
+    │   └── root.yaml                      # Root Application (手動適用)
+    └── apps/
+        ├── cilium.yaml                    # Cilium Application
+        ├── cilium-config.yaml             # Cilium CRD Application
+        └── argocd.yaml                    # ArgoCD self-management
 ```
 
 > `talosctl gen config` および `talosctl machineconfig patch` で生成されるファイルは `k8s/talos/` に配置され、シークレットを含むため `.gitignore` で除外している。

@@ -547,9 +547,9 @@ CNI には Cilium を採用し、Native Routing + L2 Announcement で LoadBalanc
 
 | VM名 | VM ID | IP | Proxmoxノード | 役割 | vCPU | RAM | Disk |
 |-------|-------|-----|---------------|------|------|-----|------|
-| k8s-cp-01 | 102001 | 10.2.0.66 | mandolin1 | control-plane | 2 | 4GB | 32GB |
-| k8s-cp-02 | 102002 | 10.2.0.67 | mandolin2 | control-plane | 2 | 4GB | 32GB |
-| k8s-cp-03 | 102003 | 10.2.0.68 | mandolin3 | control-plane | 2 | 4GB | 32GB |
+| k8s-cp-01 | 102001 | 10.2.0.66 | mandolin1 | control-plane | 4 | 8GB | 32GB |
+| k8s-cp-02 | 102002 | 10.2.0.67 | mandolin2 | control-plane | 4 | 8GB | 32GB |
+| k8s-cp-03 | 102003 | 10.2.0.68 | mandolin3 | control-plane | 4 | 8GB | 32GB |
 | k8s-worker-01 | 102004 | 10.2.0.69 | mandolin1 | worker | 4 | 8GB | 64GB |
 | k8s-worker-02 | 102005 | 10.2.0.70 | mandolin2 | worker | 4 | 8GB | 64GB |
 | k8s-worker-03 | 102006 | 10.2.0.71 | mandolin3 | worker | 4 | 8GB | 64GB |
@@ -582,13 +582,54 @@ CNI には Cilium を採用し、Native Routing + L2 Announcement で LoadBalanc
 
 | Proxmoxノード | 既存VM | K8s VM | 合計 RAM | オーバーコミット比 |
 |--------------|--------|--------|---------|-----------------|
-| mandolin1 | bastion-01 (8GB) | cp-01 (4GB) + worker-01 (8GB) | 20GB | ~1.8x |
-| mandolin2 | claude-01 (8GB) | cp-02 (4GB) + worker-02 (8GB) | 20GB | ~1.8x |
-| mandolin3 | なし | cp-03 (4GB) + worker-03 (8GB) | 12GB | ~1.1x |
+| mandolin1 | bastion-01 (8GB) | cp-01 (8GB) + worker-01 (8GB) | 24GB | ~2.2x |
+| mandolin2 | claude-01 (8GB) | cp-02 (8GB) + worker-02 (8GB) | 24GB | ~2.2x |
+| mandolin3 | なし | cp-03 (8GB) + worker-03 (8GB) | 16GB | ~1.5x |
 
 > Proxmox の memory ballooning で実使用量に応じた動的調整を行う。
 
-## 9. 将来の拡張案
+## 9. ArgoCD GitOps
+
+### 9.1 概要
+
+ArgoCD を用いた GitOps でクラスタコンポーネントを管理する。
+ArgoCD 自身も self-managed とし、全ての設定変更を Git push → ArgoCD sync で反映する。
+
+| 項目 | 値 |
+|------|-----|
+| ArgoCD UI | http://10.5.0.1 (LoadBalancer, Cilium L2 Announcement) |
+| パターン | App of Apps |
+| Self-managed | Yes |
+
+### 9.2 ブートストラップ順序
+
+Cilium (CNI) → ArgoCD → Root Application の順で手動インストールし、以降は ArgoCD が引き継ぐ。
+
+```
+1. helm install cilium          ← CNI がないと Pod が動かない (手動)
+2. kubectl apply cilium CRDs    ← LB IP Pool + L2 Policy (手動)
+3. helm install argo-cd         ← ArgoCD 本体 (手動)
+4. kubectl apply root app       ← Root Application 投入 (手動)
+5. ArgoCD が全てを引き継ぐ      ← 以降は Git → ArgoCD の自動同期
+```
+
+### 9.3 App of Apps 構成
+
+```
+Root Application (k8s/argocd/apps/)
+├── cilium          … Cilium Helm chart (multi-source)
+├── cilium-config   … Cilium CRD マニフェスト (LB IP Pool, L2 Policy)
+├── argocd          … ArgoCD self-management (multi-source)
+└── (将来のアプリ)   … Application YAML を追加するだけ
+```
+
+### 9.4 アプリ追加フロー
+
+1. `k8s/<app-name>/` に values.yaml やマニフェストを作成
+2. `k8s/argocd/apps/<app-name>.yaml` に Application YAML を作成
+3. Git push → ArgoCD が自動検出・デプロイ
+
+## 10. 将来の拡張案
 
 - **NIC増設・スイッチ更新**: マルチギガビット対応スイッチへの更新で帯域向上が可能。
 - **Ceph OSD追加**: 各ノードにSSDを追加することでCeph容量・性能を拡張可能。
