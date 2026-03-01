@@ -1,0 +1,8 @@
+server:
+  service:
+    type: LoadBalancer
+    loadBalancerIP: "10.5.0.1"
+
+configs:
+  params:
+    server.insecure: true
