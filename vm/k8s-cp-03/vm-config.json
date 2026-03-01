@@ -9,12 +9,11 @@
     "search_domain": "internal.onoe.dev"
   },
   "hardware": {
-    "cpu_cores": 2,
+    "cpu_cores": 4,
     "cpu_type": "host",
-    "memory_mb": 4096,
+    "memory_mb": 8192,
     "ballooning": {
-      "enabled": true,
-      "minimum_mb": 1024
+      "enabled": false
     },
     "disk_gb": 32,
     "storage": "vm-pool",
