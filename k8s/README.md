@@ -9,6 +9,8 @@ VLAN 102 (vm-k8s, 10.2.0.64/27) 上の HA Kubernetes クラスタ。
 | OS | Talos Linux |
 | K8s バージョン | 1.35.2 |
 | CNI | Cilium (Native Routing + L2 Announcement) |
+| Storage | Rook Ceph External (RBD → Proxmox Ceph) |
+| Default StorageClass | ceph-block |
 | API Server VIP | 10.2.0.94 |
 | API Endpoint | `https://10.2.0.94:6443` |
 | Pod CIDR | 10.3.0.0/16 |
@@ -326,6 +328,101 @@ kubectl apply -f k8s/argocd/bootstrap/root.yaml
 > この時点で ArgoCD が Cilium・cilium-config・argocd (自身) を検出し、同期を開始する。
 > 手動 Helm install した状態と Git の定義が一致していれば、差分なく Synced 状態になる。
 
+## Rook Ceph (External Cluster)
+
+Proxmox が管理する既存の Ceph クラスタに Rook の external cluster モードで接続し、K8s ワークロードに RBD ブロックストレージを提供する。
+
+### アーキテクチャ
+
+```
+K8s Pod (PVC: ceph-block)
+  ↓ CSI Driver (rook-ceph)
+K8s Node (10.2.0.66-71, VLAN 102)
+  ↓ Catalyst L3 routing
+Ceph Monitor (10.1.1.11-13, VLAN 10)
+  ↓
+Ceph OSD (k8s-rbd pool, 3x replication)
+```
+
+Rook は external モードで動作し、Ceph デーモン (MON/OSD) は管理しない。CSI ドライバのみを提供する。
+
+### ブートストラップ手順 (手順 12 の後に実施)
+
+#### 13a. Ceph プール作成 (Proxmox)
+
+```bash
+ssh root@10.1.1.11
+ceph osd pool create k8s-rbd 32 32 replicated
+ceph osd pool set k8s-rbd size 3
+ceph osd pool set k8s-rbd min_size 2
+ceph osd pool application enable k8s-rbd rbd
+```
+
+#### 13b. クレデンシャル生成 (Proxmox)
+
+```bash
+wget https://raw.githubusercontent.com/rook/rook/v1.19.2/deploy/examples/create-external-cluster-resources.py
+
+python3 create-external-cluster-resources.py \
+  --rbd-data-pool-name k8s-rbd \
+  --namespace rook-ceph \
+  --format bash \
+  --skip-monitoring-endpoint \
+  --v2-port-enable
+# → export 文が出力される。保存しておく
+```
+
+#### 13c. K8s に Secrets 投入
+
+```bash
+source /path/to/ceph-export.sh
+
+wget https://raw.githubusercontent.com/rook/rook/v1.19.2/deploy/examples/import-external-cluster.sh
+chmod +x import-external-cluster.sh
+NAMESPACE=rook-ceph ./import-external-cluster.sh
+```
+
+#### 13d. Git push (ArgoCD が自動デプロイ)
+
+`k8s/argocd/apps/rook-ceph.yaml` と `k8s/argocd/apps/rook-ceph-cluster.yaml` が main ブランチにマージされると、ArgoCD が自動的に:
+1. Rook Operator + CSI ドライバをデプロイ
+2. CephCluster CR + StorageClass `ceph-block` を作成
+
+> Operator の CRD インストールが完了するまで cluster app は失敗するが、ArgoCD の auto-retry で自動回復する。
+
+#### 13e. 検証
+
+```bash
+# Operator Pod 確認
+kubectl -n rook-ceph get pods
+
+# CephCluster 状態
+kubectl -n rook-ceph get cephcluster
+# → Connected / HEALTH_OK
+
+# StorageClass 確認
+kubectl get sc
+# → ceph-block (default)
+
+# テスト PVC
+kubectl apply -f - <<EOF
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: test-rbd-pvc
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 1Gi
+  storageClassName: ceph-block
+EOF
+kubectl get pvc test-rbd-pvc  # → Bound
+
+# 後片付け
+kubectl delete pvc test-rbd-pvc
+```
+
 ## 検証手順
 
 ```bash
@@ -396,6 +493,9 @@ k8s/
 │   └── manifests/
 │       ├── lb-ip-pool.yaml                # CiliumLoadBalancerIPPool
 │       └── l2-announcement-policy.yaml    # CiliumL2AnnouncementPolicy
+├── rook-ceph/
+│   ├── operator-values.yaml               # Rook Operator Helm values
+│   └── cluster-values.yaml                # Rook Ceph Cluster Helm values
 └── argocd/
     ├── values.yaml                         # ArgoCD Helm values
     ├── bootstrap/
@@ -403,7 +503,9 @@ k8s/
     └── apps/
         ├── cilium.yaml                    # Cilium Application
         ├── cilium-config.yaml             # Cilium CRD Application
-        └── argocd.yaml                    # ArgoCD self-management
+        ├── argocd.yaml                    # ArgoCD self-management
+        ├── rook-ceph.yaml                 # Rook Operator Application
+        └── rook-ceph-cluster.yaml         # Rook Ceph Cluster Application
 ```
 
 > `talosctl gen config` および `talosctl machineconfig patch` で生成されるファイルは `k8s/talos/` に配置され、シークレットを含むため `.gitignore` で除外している。

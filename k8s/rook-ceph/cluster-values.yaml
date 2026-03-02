@@ -1,0 +1,42 @@
+# Rook Ceph Cluster - External Mode
+# Connects to Proxmox Ceph cluster (monitors: 10.1.1.11-13)
+
+operatorNamespace: rook-ceph
+
+cephClusterSpec:
+  external:
+    enable: true
+  crashCollector:
+    disable: true
+  healthCheck:
+    daemonHealth:
+      mon:
+        disabled: false
+        interval: 45s
+
+cephBlockPools:
+  - name: ceph-blockpool
+    spec:
+      name: k8s-rbd
+    storageClass:
+      enabled: true
+      name: ceph-block
+      isDefault: true
+      reclaimPolicy: Delete
+      allowVolumeExpansion: true
+      parameters:
+        imageFormat: "2"
+        imageFeatures: layering
+        csi.storage.k8s.io/provisioner-secret-name: rook-csi-rbd-provisioner
+        csi.storage.k8s.io/provisioner-secret-namespace: rook-ceph
+        csi.storage.k8s.io/controller-expand-secret-name: rook-csi-rbd-provisioner
+        csi.storage.k8s.io/controller-expand-secret-namespace: rook-ceph
+        csi.storage.k8s.io/node-stage-secret-name: rook-csi-rbd-node
+        csi.storage.k8s.io/node-stage-secret-namespace: rook-ceph
+        csi.storage.k8s.io/fstype: ext4
+
+cephFileSystems: []
+cephObjectStores: []
+
+monitoring:
+  enabled: false

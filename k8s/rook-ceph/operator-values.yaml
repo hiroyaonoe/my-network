@@ -1,0 +1,18 @@
+# Rook Ceph Operator - External Cluster Mode
+
+csi:
+  # CSI plugins need host networking to reach Ceph monitors (10.1.1.x) directly
+  enableCSIHostNetwork: true
+  enableRbdDriver: true
+  enableCephfsDriver: false
+
+# No local disk discovery needed for external cluster
+enableDiscoveryDaemon: false
+
+# Resource limits
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    memory: 512Mi
