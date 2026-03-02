@@ -423,6 +423,77 @@ kubectl get pvc test-rbd-pvc  # → Bound
 kubectl delete pvc test-rbd-pvc
 ```
 
+## HA DNS サーバー (k8s_gateway)
+
+CoreDNS + k8s_gateway プラグインによる HA DNS サーバー。静的レコード・K8s Service 自動登録・上流 DNS 転送を提供する。
+
+### アーキテクチャ
+
+```
+Client (VM / Tailscale)
+  ↓ DNS query (any domain)
+k8s_gateway (10.5.0.53:53, LoadBalancer, 3 replicas)
+  ↓ CoreDNS (.:1053)
+  ├── hosts plugin → 静的レコード → fallthrough
+  ├── k8s_gateway plugin → K8s Service/HTTPRoute 自動解決 → fallthrough
+  └── forward plugin → 10.0.0.1 (上流 DNS)
+```
+
+| 項目 | 値 |
+|------|-----|
+| ドメイン | internal.onoe.dev |
+| DNS VIP | 10.5.0.53 |
+| レプリカ数 | 3 |
+
+### デプロイ (ArgoCD 自動)
+
+`k8s/argocd/apps/k8s-gateway.yaml` が main にマージされると、ArgoCD が自動的に k8s-gateway namespace にデプロイする。
+
+### 検証
+
+```bash
+# 1. Pod 確認 (3 replicas on different nodes)
+kubectl -n k8s-gateway get pods -o wide
+
+# 2. Service VIP 確認
+kubectl -n k8s-gateway get svc
+# → EXTERNAL-IP: 10.5.0.53
+
+# 3. 静的レコード
+dig @10.5.0.53 mandolin1.internal.onoe.dev +short
+# → 10.1.1.11
+
+# 4. K8s Service 自動解決
+dig @10.5.0.53 argocd-server.argocd.internal.onoe.dev +short
+# → 10.5.0.1
+
+# 5. アノテーション付きカスタム名
+dig @10.5.0.53 argocd.internal.onoe.dev +short
+# → 10.5.0.1
+
+# 6. 外部 DNS 転送
+dig @10.5.0.53 google.com +short
+# → 正常解決
+
+# 7. 存在しない内部名
+dig @10.5.0.53 nonexistent.internal.onoe.dev
+# → NXDOMAIN
+```
+
+### Tailscale Split DNS (手動)
+
+1. bastion-01 で LB VIP ネットワークを Tailscale に広告:
+
+   ```bash
+   # 既存の advertise-routes に 10.5.0.0/24 を追加
+   sudo tailscale up --advertise-routes=10.1.1.0/24,10.2.0.0/16,10.5.0.0/24 --accept-routes
+   ```
+
+2. Tailscale admin console (https://login.tailscale.com/admin/machines) で bastion-01 の `10.5.0.0/24` ルートを承認
+
+3. Tailscale admin console → DNS → Split DNS:
+   - `internal.onoe.dev` → 10.5.0.53
+
 ## 検証手順
 
 ```bash
@@ -496,6 +567,8 @@ k8s/
 ├── rook-ceph/
 │   ├── operator-values.yaml               # Rook Operator Helm values
 │   └── cluster-values.yaml                # Rook Ceph Cluster Helm values
+├── k8s-gateway/
+│   └── values.yaml                         # k8s-gateway Helm values
 └── argocd/
     ├── values.yaml                         # ArgoCD Helm values
     ├── bootstrap/
@@ -505,7 +578,8 @@ k8s/
         ├── cilium-config.yaml             # Cilium CRD Application
         ├── argocd.yaml                    # ArgoCD self-management
         ├── rook-ceph.yaml                 # Rook Operator Application
-        └── rook-ceph-cluster.yaml         # Rook Ceph Cluster Application
+        ├── rook-ceph-cluster.yaml         # Rook Ceph Cluster Application
+        └── k8s-gateway.yaml               # k8s-gateway DNS Application
 ```
 
 > `talosctl gen config` および `talosctl machineconfig patch` で生成されるファイルは `k8s/talos/` に配置され、シークレットを含むため `.gitignore` で除外している。

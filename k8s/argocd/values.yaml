@@ -2,6 +2,8 @@ server:
   service:
     type: LoadBalancer
     loadBalancerIP: "10.5.0.1"
+    annotations:
+      external-dns.alpha.kubernetes.io/hostname: argocd.internal.onoe.dev
 
 configs:
   params:

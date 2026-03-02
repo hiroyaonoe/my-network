@@ -647,6 +647,7 @@ Root Application (k8s/argocd/apps/)
 ├── argocd              … ArgoCD self-management (multi-source)
 ├── rook-ceph           … Rook Operator + CSI ドライバ (multi-source)
 ├── rook-ceph-cluster   … CephCluster CR + StorageClass (multi-source)
+├── k8s-gateway         … HA DNS サーバー (multi-source)
 └── (将来のアプリ)       … Application YAML を追加するだけ
 ```
 
@@ -656,7 +657,59 @@ Root Application (k8s/argocd/apps/)
 2. `k8s/argocd/apps/<app-name>.yaml` に Application YAML を作成
 3. Git push → ArgoCD が自動検出・デプロイ
 
-## 10. 将来の拡張案
+## 10. HA DNS サーバー (k8s_gateway)
+
+### 10.1 概要
+
+K8s クラスタ上に HA な DNS サーバーを構築し、全 VM・Tailscale デバイスから利用可能にする。
+CoreDNS + k8s_gateway プラグインにより、静的レコード・K8s Service 自動登録・上流 DNS 転送を一元的に処理する。
+
+| 項目 | 値 |
+|------|-----|
+| ドメイン | internal.onoe.dev |
+| DNS VIP | 10.5.0.53 (LoadBalancer, Cilium L2 Announcement) |
+| レプリカ数 | 3 (topologySpreadConstraints で各 worker に分散) |
+| 上流 DNS | 10.0.0.1 (WAN 側ルータ) |
+
+### 10.2 アーキテクチャ
+
+```
+Client (VM / Tailscale)
+  ↓ DNS query (any domain)
+k8s_gateway (10.5.0.53:53, LoadBalancer, 3 replicas)
+  ↓ CoreDNS (.:1053)
+  ├── hosts plugin → 静的レコード (mandolin1.internal.onoe.dev 等) → fallthrough
+  ├── k8s_gateway plugin → K8s Service/HTTPRoute 自動解決 → fallthrough
+  └── forward plugin → 10.0.0.1 (上流 DNS)
+```
+
+- `internal.onoe.dev` のクエリ → hosts (静的) → k8s_gateway (K8s リソース) → forward (上流)
+- それ以外のクエリ (google.com 等) → hosts ミス → k8s_gateway スキップ → forward で上流に転送
+- LoadBalancer Service は `<service>.<namespace>.internal.onoe.dev` で自動解決
+- `external-dns.alpha.kubernetes.io/hostname` アノテーションでカスタム名も設定可能
+
+### 10.3 静的レコード
+
+| ホスト名 | IP | 用途 |
+|----------|-----|------|
+| mandolin1.internal.onoe.dev | 10.1.1.11 | Proxmox ノード |
+| mandolin2.internal.onoe.dev | 10.1.1.12 | Proxmox ノード |
+| mandolin3.internal.onoe.dev | 10.1.1.13 | Proxmox ノード |
+| bastion-01.internal.onoe.dev | 10.2.0.2 | 踏み台 VM |
+| k8s-api.internal.onoe.dev | 10.2.0.94 | K8s API Server VIP |
+
+### 10.4 フォールバック設計
+
+| クライアント | Primary DNS | Fallback | 備考 |
+|-------------|-------------|----------|------|
+| VM | 10.5.0.53 | 10.0.0.1 | 各 VM の OS 側で DNS を設定 |
+| Tailscale | 10.5.0.53 (split DNS) | - | `internal.onoe.dev` のみ転送 |
+| K8s ノード自身 | 10.0.0.1 | - | 循環依存回避、変更なし |
+
+> K8s ノードが自身の DNS を使うと、DNS Pod が起動する前にクエリが失敗する循環依存が発生するため、K8s ノードは上流 DNS (10.0.0.1) を使い続ける。
+> VM の DNS 変更は各 VM の OS 側 (resolv.conf 等) で個別に設定する。Catalyst DHCP は変更しない。
+
+## 11. 将来の拡張案
 
 - **NIC増設・スイッチ更新**: マルチギガビット対応スイッチへの更新で帯域向上が可能。
 - **Ceph OSD追加**: 各ノードにSSDを追加することでCeph容量・性能を拡張可能。

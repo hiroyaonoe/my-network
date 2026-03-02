@@ -1,0 +1,26 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: k8s-gateway
+  namespace: argocd
+spec:
+  project: default
+  sources:
+    - repoURL: https://k8s-gateway.github.io/k8s_gateway/
+      chart: k8s-gateway
+      targetRevision: "3.*"
+      helm:
+        valueFiles:
+          - $values/k8s/k8s-gateway/values.yaml
+    - repoURL: https://github.com/hiroyaonoe/my-network.git
+      targetRevision: main
+      ref: values
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: k8s-gateway
+  syncPolicy:
+    syncOptions:
+      - CreateNamespace=true
+    automated:
+      prune: true
+      selfHeal: true

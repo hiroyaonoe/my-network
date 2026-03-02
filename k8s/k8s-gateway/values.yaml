@@ -1,0 +1,58 @@
+domain: internal.onoe.dev
+
+replicaCount: 3
+
+service:
+  type: LoadBalancer
+  port: 53
+  annotations:
+    io.cilium/lb-ipam-ips: "10.5.0.53"
+
+fallthrough:
+  enabled: true
+
+watchedResources:
+  - Ingress
+  - Service
+  - HTTPRoute
+
+extraZonePlugins:
+  - name: log
+  - name: errors
+  - name: health
+    configBlock: |-
+      lameduck 5s
+  - name: ready
+  - name: hosts
+    configBlock: |-
+      # Proxmox nodes
+      10.1.1.11 mandolin1.internal.onoe.dev
+      10.1.1.12 mandolin2.internal.onoe.dev
+      10.1.1.13 mandolin3.internal.onoe.dev
+      # VMs
+      10.2.0.2 bastion-01.internal.onoe.dev
+      # K8s API
+      10.2.0.94 k8s-api.internal.onoe.dev
+      fallthrough
+  - name: prometheus
+    parameters: 0.0.0.0:9153
+  - name: forward
+    parameters: . 10.0.0.1
+  - name: loop
+  - name: reload
+  - name: loadbalance
+
+topologySpreadConstraints:
+  - maxSkew: 1
+    topologyKey: kubernetes.io/hostname
+    whenUnsatisfiable: DoNotSchedule
+    labelSelector:
+      matchLabels:
+        app.kubernetes.io/name: k8s-gateway
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    memory: 128Mi
