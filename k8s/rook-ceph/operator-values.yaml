@@ -6,10 +6,6 @@ csi:
   enableRbdDriver: true
   enableCephfsDriver: false
 
-# Disable CSI Operator mode (Rook v1.19 default: true)
-# Use legacy CSI driver deployment for simplicity with external cluster
-enableCSIOperator: false
-
 # No local disk discovery needed for external cluster
 enableDiscoveryDaemon: false
 
