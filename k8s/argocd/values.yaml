@@ -4,9 +4,16 @@ server:
     loadBalancerIP: "10.5.0.1"
     annotations:
       external-dns.alpha.kubernetes.io/hostname: argocd.internal.onoe.dev
+  certificate:
+    enabled: true
+    domain: argocd.internal.onoe.dev
+    issuer:
+      name: internal-ca
+      kind: ClusterIssuer
+      group: cert-manager.io
 
 configs:
   params:
-    server.insecure: true
+    server.insecure: false
   cm:
-    url: http://argocd.internal.onoe.dev
+    url: https://argocd.internal.onoe.dev

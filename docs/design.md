@@ -622,7 +622,7 @@ ArgoCD 自身も self-managed とし、全ての設定変更を Git push → Arg
 
 | 項目 | 値 |
 |------|-----|
-| ArgoCD UI | http://argocd.internal.onoe.dev (10.5.0.1, LoadBalancer) |
+| ArgoCD UI | https://argocd.internal.onoe.dev (10.5.0.1, LoadBalancer) |
 | パターン | App of Apps |
 | Self-managed | Yes |
 
@@ -645,6 +645,8 @@ Root Application (k8s/argocd/apps/)
 ├── cilium              … Cilium Helm chart (multi-source)
 ├── cilium-config       … Cilium CRD マニフェスト (LB IP Pool, L2 Policy)
 ├── argocd              … ArgoCD self-management (multi-source)
+├── cert-manager        … cert-manager Helm chart (multi-source)
+├── cert-manager-config … ClusterIssuer + CA Certificate マニフェスト
 ├── rook-ceph           … Rook Operator + CSI ドライバ (multi-source)
 ├── rook-ceph-cluster   … CephCluster CR + StorageClass (multi-source)
 ├── k8s-gateway         … HA DNS サーバー (multi-source)
@@ -711,7 +713,49 @@ k8s_gateway (10.5.0.53:53, LoadBalancer, 3 replicas)
 > K8s ノードが自身の DNS を使うと、DNS Pod が起動する前にクエリが失敗する循環依存が発生するため、K8s ノードは上流 DNS (10.0.0.1) を使い続ける。
 > VM の DNS 変更は各 VM の OS 側 (resolv.conf 等) で個別に設定する。Catalyst DHCP は変更しない。
 
-## 11. 将来の拡張案
+## 11. TLS (cert-manager + Self-Signed CA)
+
+### 11.1 概要
+
+`.dev` TLD は HSTS preload リストに登録されており、ブラウザは `http://*.dev` を自動的に `https://` にリダイレクトする。
+cert-manager で内部 CA を構築し、各サービスに TLS 証明書を発行することで対応する。
+
+| 項目 | 値 |
+|------|-----|
+| cert-manager | cert-manager namespace |
+| Root CA | internal-ca-root (self-signed, ECDSA P-256, 10年) |
+| ClusterIssuer | internal-ca (全 namespace で利用可能) |
+
+### 11.2 アーキテクチャ
+
+```
+cert-manager (cert-manager namespace)
+  ├── SelfSigned ClusterIssuer    ← 自己署名で CA 証明書を発行
+  ├── CA Certificate              ← internal-ca-root (ルート CA 証明書)
+  └── CA ClusterIssuer            ← internal-ca (全 namespace で利用可能)
+
+ArgoCD (argocd namespace)
+  └── Certificate CR → argocd-server-tls Secret
+        ↑ cert-manager が internal-ca で署名
+        ↓
+      ArgoCD Server が自動検出・TLS 有効化
+```
+
+### 11.3 クライアント側 CA 信頼
+
+自己署名 CA のため、証明書警告を回避するには CA 証明書をシステムに信頼させる:
+
+```bash
+# CA 証明書のエクスポート
+kubectl -n cert-manager get secret internal-ca-root-secret \
+  -o jsonpath='{.data.ca\.crt}' | base64 -d > internal-ca.crt
+
+# macOS: キーチェーンに追加
+sudo security add-trusted-cert -d -r trustRoot \
+  -k /Library/Keychains/System.keychain internal-ca.crt
+```
+
+## 12. 将来の拡張案
 
 - **NIC増設・スイッチ更新**: マルチギガビット対応スイッチへの更新で帯域向上が可能。
 - **Ceph OSD追加**: 各ノードにSSDを追加することでCeph容量・性能を拡張可能。

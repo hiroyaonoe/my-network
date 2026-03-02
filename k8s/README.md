@@ -316,7 +316,7 @@ kubectl -n argocd get secret argocd-initial-admin-secret \
 kubectl -n argocd get svc argocd-server
 # → EXTERNAL-IP: 10.5.0.1
 
-# ブラウザで http://10.5.0.1 にアクセス
+# ブラウザで https://argocd.internal.onoe.dev にアクセス
 ```
 
 ### 12. Root Application 投入 (GitOps 開始)
@@ -327,6 +327,64 @@ kubectl apply -f k8s/argocd/bootstrap/root.yaml
 
 > この時点で ArgoCD が Cilium・cilium-config・argocd (自身) を検出し、同期を開始する。
 > 手動 Helm install した状態と Git の定義が一致していれば、差分なく Synced 状態になる。
+
+## TLS (cert-manager + Self-Signed CA)
+
+cert-manager で内部 CA を構築し、ArgoCD 等のサービスに TLS 証明書を発行する。
+`.dev` TLD は HSTS preload リストにより HTTPS が必須のため、この設定が必要。
+
+### アーキテクチャ
+
+```
+cert-manager (cert-manager namespace)
+  ├── SelfSigned ClusterIssuer    ← 自己署名で CA 証明書を発行
+  ├── CA Certificate              ← internal-ca-root (ルート CA 証明書)
+  └── CA ClusterIssuer            ← internal-ca (全 namespace で利用可能)
+
+ArgoCD (argocd namespace)
+  └── Certificate CR → argocd-server-tls Secret
+        ↑ cert-manager が internal-ca で署名
+```
+
+### デプロイ (ArgoCD 自動)
+
+`k8s/argocd/apps/cert-manager.yaml` と `k8s/argocd/apps/cert-manager-config.yaml` が main にマージされると、ArgoCD が自動的に:
+1. cert-manager (CRDs + controller) をデプロイ
+2. ClusterIssuer + CA Certificate を作成
+3. ArgoCD の Certificate CR から `argocd-server-tls` Secret を生成・TLS 有効化
+
+### CA 証明書の信頼 (手動)
+
+自己署名 CA のため、ブラウザの証明書警告を回避するには CA 証明書をシステムに信頼させる:
+
+```bash
+# CA 証明書のエクスポート
+kubectl -n cert-manager get secret internal-ca-root-secret \
+  -o jsonpath='{.data.ca\.crt}' | base64 -d > internal-ca.crt
+
+# macOS: キーチェーンに追加
+sudo security add-trusted-cert -d -r trustRoot \
+  -k /Library/Keychains/System.keychain internal-ca.crt
+```
+
+### 検証
+
+```bash
+# ClusterIssuer 確認
+kubectl get clusterissuer
+# → selfsigned-issuer, internal-ca ともに Ready
+
+# CA Certificate 確認
+kubectl -n cert-manager get certificate internal-ca-root
+# → Ready: True
+
+# ArgoCD Certificate 確認
+kubectl -n argocd get certificate
+# → argocd-server-tls Ready: True
+
+# HTTPS アクセス確認
+curl -k https://argocd.internal.onoe.dev
+```
 
 ## Rook Ceph (External Cluster)
 
@@ -562,6 +620,12 @@ k8s/
 │   └── manifests/
 │       ├── lb-ip-pool.yaml                # CiliumLoadBalancerIPPool
 │       └── l2-announcement-policy.yaml    # CiliumL2AnnouncementPolicy
+├── cert-manager/
+│   ├── values.yaml                         # cert-manager Helm values
+│   └── manifests/
+│       ├── self-signed-issuer.yaml        # SelfSigned ClusterIssuer
+│       ├── ca-certificate.yaml            # Internal CA root Certificate
+│       └── ca-issuer.yaml                 # Internal CA ClusterIssuer
 ├── rook-ceph/
 │   ├── operator-values.yaml               # Rook Operator Helm values
 │   └── cluster-values.yaml                # Rook Ceph Cluster Helm values
@@ -575,6 +639,8 @@ k8s/
         ├── cilium.yaml                    # Cilium Application
         ├── cilium-config.yaml             # Cilium CRD Application
         ├── argocd.yaml                    # ArgoCD self-management
+        ├── cert-manager.yaml              # cert-manager Application
+        ├── cert-manager-config.yaml       # cert-manager config Application
         ├── rook-ceph.yaml                 # Rook Operator Application
         ├── rook-ceph-cluster.yaml         # Rook Ceph Cluster Application
         └── k8s-gateway.yaml               # k8s-gateway DNS Application
