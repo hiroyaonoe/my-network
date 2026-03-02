@@ -16,7 +16,9 @@ cephClusterSpec:
 
 cephBlockPools:
   - name: k8s-rbd
-    spec: {}
+    spec:
+      replicated:
+        size: 3
     storageClass:
       enabled: true
       name: ceph-block
