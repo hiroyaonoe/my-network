@@ -15,9 +15,8 @@ cephClusterSpec:
         interval: 45s
 
 cephBlockPools:
-  - name: ceph-blockpool
-    spec:
-      name: k8s-rbd
+  - name: k8s-rbd
+    spec: {}
     storageClass:
       enabled: true
       name: ceph-block
