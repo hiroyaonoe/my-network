@@ -1,0 +1,38 @@
+{
+  "vm_id": 103002,
+  "vm_name": "opencraw-01",
+  "vlan_tag": 103,
+  "network": {
+    "ip_address": "10.2.0.99/27",
+    "gateway": "10.2.0.97",
+    "dns": "10.0.0.1",
+    "search_domain": "internal.onoe.dev"
+  },
+  "hardware": {
+    "cpu_cores": 4,
+    "cpu_type": "host",
+    "memory_mb": 16384,
+    "disk_gb": 128,
+    "storage": "vm-pool",
+    "disk_options": {
+      "discard": true,
+      "ssd_emulation": true
+    }
+  },
+  "os": {
+    "type": "Ubuntu",
+    "version": "24.04 LTS",
+    "iso": "ubuntu-24.04.1-live-server-amd64.iso"
+  },
+  "proxmox": {
+    "node": "mandolin3",
+    "agent_enabled": true,
+    "start_at_boot": true
+  },
+  "metadata": {
+    "purpose": "OpenCraw実行環境（隔離VM）",
+    "description": "Slackで対話可能なOpenCrawを実行する隔離VM。Proxmox Firewallにより内部ネットワークへのアクセスを遮断し、許可されたSaaSのみ通信可能。",
+    "created_at": "2026-03-02",
+    "created_by": "admin"
+  }
+}
