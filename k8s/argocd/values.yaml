@@ -8,3 +8,5 @@ server:
 configs:
   params:
     server.insecure: true
+  cm:
+    url: http://argocd.internal.onoe.dev

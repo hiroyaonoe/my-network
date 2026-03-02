@@ -622,7 +622,7 @@ ArgoCD 自身も self-managed とし、全ての設定変更を Git push → Arg
 
 | 項目 | 値 |
 |------|-----|
-| ArgoCD UI | http://10.5.0.1 (LoadBalancer, Cilium L2 Announcement) |
+| ArgoCD UI | http://argocd.internal.onoe.dev (10.5.0.1, LoadBalancer) |
 | パターン | App of Apps |
 | Self-managed | Yes |
 
@@ -685,8 +685,9 @@ k8s_gateway (10.5.0.53:53, LoadBalancer, 3 replicas)
 
 - `internal.onoe.dev` のクエリ → hosts (静的) → k8s_gateway (K8s リソース) → forward (上流)
 - それ以外のクエリ (google.com 等) → hosts ミス → k8s_gateway スキップ → forward で上流に転送
-- LoadBalancer Service は `<service>.<namespace>.internal.onoe.dev` で自動解決
-- `external-dns.alpha.kubernetes.io/hostname` アノテーションでカスタム名も設定可能
+- `external-dns.alpha.kubernetes.io/hostname` アノテーションでカスタム名を設定可能
+- アノテーション**なし**の LB Service は `<service>.<namespace>.internal.onoe.dev` で自動解決
+- アノテーション**あり**の LB Service はカスタム名**のみ**で解決 (自動の `service.namespace.domain` 形式は生成されない)
 
 ### 10.3 静的レコード
 
@@ -696,6 +697,7 @@ k8s_gateway (10.5.0.53:53, LoadBalancer, 3 replicas)
 | mandolin2.internal.onoe.dev | 10.1.1.12 | Proxmox ノード |
 | mandolin3.internal.onoe.dev | 10.1.1.13 | Proxmox ノード |
 | bastion-01.internal.onoe.dev | 10.2.0.2 | 踏み台 VM |
+| claude-01.internal.onoe.dev | 10.2.0.98 | Claude Code 開発環境 VM |
 | k8s-api.internal.onoe.dev | 10.2.0.94 | K8s API Server VIP |
 
 ### 10.4 フォールバック設計

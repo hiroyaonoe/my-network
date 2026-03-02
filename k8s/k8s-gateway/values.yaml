@@ -31,6 +31,7 @@ extraZonePlugins:
       10.1.1.13 mandolin3.internal.onoe.dev
       # VMs
       10.2.0.2 bastion-01.internal.onoe.dev
+      10.2.0.98 claude-01.internal.onoe.dev
       # K8s API
       10.2.0.94 k8s-api.internal.onoe.dev
       fallthrough

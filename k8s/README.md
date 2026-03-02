@@ -445,6 +445,8 @@ k8s_gateway (10.5.0.53:53, LoadBalancer, 3 replicas)
 | DNS VIP | 10.5.0.53 |
 | レプリカ数 | 3 |
 
+> **アノテーションと自動解決の排他性**: `external-dns.alpha.kubernetes.io/hostname` アノテーションを設定した LB Service は、カスタム名のみで解決される。自動の `<service>.<namespace>.<domain>` 形式は生成されない。アノテーションなしの LB Service は自動形式で解決される。
+
 ### デプロイ (ArgoCD 自動)
 
 `k8s/argocd/apps/k8s-gateway.yaml` が main にマージされると、ArgoCD が自動的に k8s-gateway namespace にデプロイする。
@@ -463,11 +465,7 @@ kubectl -n k8s-gateway get svc
 dig @10.5.0.53 mandolin1.internal.onoe.dev +short
 # → 10.1.1.11
 
-# 4. K8s Service 自動解決
-dig @10.5.0.53 argocd-server.argocd.internal.onoe.dev +short
-# → 10.5.0.1
-
-# 5. アノテーション付きカスタム名
+# 4. アノテーション付きカスタム名
 dig @10.5.0.53 argocd.internal.onoe.dev +short
 # → 10.5.0.1
 
