@@ -1,0 +1,39 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: reboot-scripts
+  namespace: node-reboot
+data:
+  reboot-cp.sh: |
+    #!/bin/sh
+    set -e
+
+    NODE_IP="$1"
+    TALOSCONFIG="/var/run/secrets/talosconfig/talosconfig"
+
+    echo "Checking etcd health on ${NODE_IP}..."
+    if ! talosctl --talosconfig "${TALOSCONFIG}" --endpoints "${NODE_IP}" --nodes "${NODE_IP}" etcd status; then
+      echo "ERROR: etcd health check failed. Aborting reboot."
+      exit 1
+    fi
+
+    MEMBER_COUNT=$(talosctl --talosconfig "${TALOSCONFIG}" --endpoints "${NODE_IP}" --nodes "${NODE_IP}" etcd members 2>/dev/null | tail -n +2 | wc -l)
+    if [ "${MEMBER_COUNT}" -lt 3 ]; then
+      echo "ERROR: etcd member count is ${MEMBER_COUNT} (expected >= 3). Aborting reboot."
+      exit 1
+    fi
+    echo "etcd health check passed. Member count: ${MEMBER_COUNT}"
+
+    echo "Rebooting control plane node ${NODE_IP}..."
+    talosctl --talosconfig "${TALOSCONFIG}" --endpoints "${NODE_IP}" --nodes "${NODE_IP}" reboot
+    echo "Reboot command sent successfully."
+  reboot-worker.sh: |
+    #!/bin/sh
+    set -e
+
+    NODE_IP="$1"
+    TALOSCONFIG="/var/run/secrets/talosconfig/talosconfig"
+
+    echo "Rebooting worker node ${NODE_IP}..."
+    talosctl --talosconfig "${TALOSCONFIG}" --endpoints "${NODE_IP}" --nodes "${NODE_IP}" reboot
+    echo "Reboot command sent successfully."

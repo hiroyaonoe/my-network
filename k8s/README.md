@@ -635,6 +635,16 @@ k8s/
 │       ├── externalsecret-rook-ceph-config.yaml       # ExternalSecret
 │       ├── externalsecret-rook-csi-rbd-provisioner.yaml # ExternalSecret
 │       └── externalsecret-rook-csi-rbd-node.yaml      # ExternalSecret
+├── node-reboot/
+│   └── manifests/
+│       ├── externalsecret-talosconfig.yaml # ExternalSecret (Vault → talosconfig)
+│       ├── configmap-reboot-script.yaml    # リブートスクリプト (CP用/Worker用)
+│       ├── cronjob-k8s-cp-01.yaml         # CronJob CP-01 (09:00 JST)
+│       ├── cronjob-k8s-cp-02.yaml         # CronJob CP-02 (13:00 JST)
+│       ├── cronjob-k8s-cp-03.yaml         # CronJob CP-03 (17:00 JST)
+│       ├── cronjob-k8s-worker-01.yaml     # CronJob Worker-01 (11:00 JST)
+│       ├── cronjob-k8s-worker-02.yaml     # CronJob Worker-02 (15:00 JST)
+│       └── cronjob-k8s-worker-03.yaml     # CronJob Worker-03 (19:00 JST)
 ├── k8s-gateway/
 │   └── values.yaml                         # k8s-gateway Helm values
 ├── vault/
@@ -682,7 +692,8 @@ k8s/
         ├── vault.yaml                     # Vault Application
         ├── vault-config.yaml              # Vault TLS Certificate Application
         ├── external-secrets.yaml          # ESO Application
-        └── external-secrets-config.yaml   # ClusterSecretStore Application
+        ├── external-secrets-config.yaml   # ClusterSecretStore Application
+        └── node-reboot.yaml              # Node Periodic Reboot Application
 ```
 
 > `talosctl gen config` および `talosctl machineconfig patch` で生成されるファイルは `k8s/talos/` に配置され、シークレットを含むため `.gitignore` で除外している。
@@ -946,6 +957,82 @@ kubectl get clustersecretstore vault  # Ready=True
 
 # 既存 Secret 移行確認
 kubectl -n monitoring get externalsecret  # SecretSynced=True
+```
+
+## ノード定期リブート (node-reboot)
+
+Proxmox の memory ballooning によりノードが OOM → NotReady になる問題への対策として、CronJob で `talosctl reboot` を定期実行しメモリ状態をリセットする。
+
+### アーキテクチャ
+
+```
+[CronJob] (node-reboot namespace, 6個)
+  ├── reboot-k8s-cp-{01,02,03}    → reboot-cp.sh (etcd health check + reboot)
+  └── reboot-k8s-worker-{01,02,03} → reboot-worker.sh (reboot only)
+        ↓
+[talosctl] (ghcr.io/siderolabs/talosctl:v1.12.4)
+  ├── talosconfig: Vault → ExternalSecret → Secret
+  └── --endpoints/--nodes: 対象ノード IP を直接指定
+```
+
+### スケジュール
+
+CP/Worker 交互に 2 時間間隔で実行。CP が連続リブートされることを防止する。
+
+| CronJob | 時刻 (JST) | Script | Node IP |
+|---------|-----------|--------|---------|
+| reboot-k8s-cp-01 | 毎日 09:00 | reboot-cp.sh | 10.2.0.66 |
+| reboot-k8s-worker-01 | 毎日 11:00 | reboot-worker.sh | 10.2.0.69 |
+| reboot-k8s-cp-02 | 毎日 13:00 | reboot-cp.sh | 10.2.0.67 |
+| reboot-k8s-worker-02 | 毎日 15:00 | reboot-worker.sh | 10.2.0.70 |
+| reboot-k8s-cp-03 | 毎日 17:00 | reboot-cp.sh | 10.2.0.68 |
+| reboot-k8s-worker-03 | 毎日 19:00 | reboot-worker.sh | 10.2.0.71 |
+
+### CP リブートの安全策
+
+CP ノードはリブート前に以下を確認し、失敗時は中止する:
+1. `talosctl etcd status` で対象ノードの etcd 健全性確認
+2. `talosctl etcd members` でメンバー数が 3 以上であること (quorum 保護)
+
+### 手動前提条件 (Git push 前)
+
+```bash
+# 1. Vault に talosconfig を格納
+kubectl -n vault exec -it vault-0 -- sh
+vault login
+vault kv put secret/node-reboot/talosconfig \
+  talosconfig="$(cat /path/to/talosconfig)"
+exit
+```
+
+> Vault ポリシー `external-secrets` は `secret/data/*` の read を許可済みのため、追加設定は不要。
+
+### デプロイ (ArgoCD 自動)
+
+`k8s/argocd/apps/node-reboot.yaml` が main にマージされると、ArgoCD が自動的に node-reboot namespace にデプロイする。
+
+### 検証
+
+```bash
+# 1. ArgoCD Application 確認
+kubectl -n argocd get application node-reboot
+# → Synced/Healthy
+
+# 2. ExternalSecret 確認
+kubectl -n node-reboot get externalsecret talosconfig
+# → SecretSynced
+
+# 3. CronJob 一覧
+kubectl -n node-reboot get cronjobs
+
+# 4. 手動テスト (Worker ノードで実施推奨)
+kubectl -n node-reboot create job --from=cronjob/reboot-k8s-worker-01 test-reboot
+
+# 5. Pod ログ確認
+kubectl -n node-reboot logs job/test-reboot
+
+# 6. 対象ノードが再起動後 Ready に戻ることを確認
+kubectl get nodes -w
 ```
 
 ## 関連ドキュメント
