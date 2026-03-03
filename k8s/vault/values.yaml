@@ -95,6 +95,8 @@ server:
   extraEnvironmentVars:
     VAULT_CACERT: /vault/tls/ca.crt
     VAULT_ADDR: https://127.0.0.1:8200
+    VAULT_API_ADDR: https://$(HOSTNAME).vault-internal:8200
+    VAULT_CLUSTER_ADDR: https://$(HOSTNAME).vault-internal:8201
 
   affinity: |
     podAntiAffinity:
