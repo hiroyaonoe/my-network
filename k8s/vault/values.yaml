@@ -1,0 +1,73 @@
+server:
+  ha:
+    enabled: true
+    replicas: 3
+    raft:
+      enabled: true
+      config: |
+        ui = true
+
+        listener "tcp" {
+          tls_disable    = 0
+          address        = "[::]:8200"
+          cluster_address = "[::]:8201"
+          tls_cert_file  = "/vault/tls/tls.crt"
+          tls_key_file   = "/vault/tls/tls.key"
+          tls_client_ca_file = "/vault/tls/ca.crt"
+        }
+
+        storage "raft" {
+          path = "/vault/data"
+        }
+
+        service_registration "kubernetes" {}
+
+  service:
+    type: LoadBalancer
+    loadBalancerIP: "10.5.0.3"
+    annotations:
+      external-dns.alpha.kubernetes.io/hostname: vault.internal.onoe.dev
+
+  dataStorage:
+    enabled: true
+    size: 10Gi
+    storageClass: ceph-block
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      memory: 512Mi
+
+  volumes:
+    - name: tls
+      secret:
+        secretName: vault-server-tls
+
+  volumeMounts:
+    - name: tls
+      mountPath: /vault/tls
+      readOnly: true
+
+  extraEnvironmentVars:
+    VAULT_CACERT: /vault/tls/ca.crt
+    VAULT_ADDR: https://127.0.0.1:8200
+
+  affinity: |
+    podAntiAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        - labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: {{ template "vault.name" . }}
+              component: server
+          topologyKey: kubernetes.io/hostname
+
+ui:
+  enabled: true
+
+injector:
+  enabled: false
+
+csi:
+  enabled: false

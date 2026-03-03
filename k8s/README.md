@@ -628,14 +628,30 @@ k8s/
 │       └── ca-issuer.yaml                 # Internal CA ClusterIssuer
 ├── rook-ceph/
 │   ├── operator-values.yaml               # Rook Operator Helm values
-│   └── cluster-values.yaml                # Rook Ceph Cluster Helm values
+│   ├── cluster-values.yaml                # Rook Ceph Cluster Helm values
+│   └── manifests/
+│       ├── storageclass.yaml              # StorageClass (ceph-block)
+│       ├── externalsecret-rook-ceph-mon.yaml          # ExternalSecret
+│       ├── externalsecret-rook-ceph-config.yaml       # ExternalSecret
+│       ├── externalsecret-rook-csi-rbd-provisioner.yaml # ExternalSecret
+│       └── externalsecret-rook-csi-rbd-node.yaml      # ExternalSecret
 ├── k8s-gateway/
 │   └── values.yaml                         # k8s-gateway Helm values
+├── vault/
+│   ├── values.yaml                         # Vault Helm values (HA Raft)
+│   └── manifests/
+│       └── certificate.yaml               # Vault TLS Certificate
+├── external-secrets/
+│   ├── values.yaml                         # ESO Helm values
+│   └── manifests/
+│       └── cluster-secret-store.yaml      # ClusterSecretStore (Vault)
 ├── monitoring/
 │   ├── values.yaml                         # kube-prometheus-stack Helm values
 │   └── manifests/
 │       ├── grafana-certificate.yaml       # Grafana TLS Certificate
-│       └── pve-exporter.yaml              # PVE Exporter Deployment + Service
+│       ├── pve-exporter.yaml              # PVE Exporter Deployment + Service
+│       ├── externalsecret-alertmanager-slack-webhook.yaml  # ExternalSecret
+│       └── externalsecret-pve-exporter-credentials.yaml   # ExternalSecret
 ├── loki/
 │   └── values.yaml                         # Loki Helm values
 ├── alloy/
@@ -662,7 +678,11 @@ k8s/
         ├── loki.yaml                      # Loki Application
         ├── alloy.yaml                     # Grafana Alloy Application
         ├── tempo.yaml                     # Grafana Tempo Application
-        └── opentelemetry.yaml             # OTel Collector Application
+        ├── opentelemetry.yaml             # OTel Collector Application
+        ├── vault.yaml                     # Vault Application
+        ├── vault-config.yaml              # Vault TLS Certificate Application
+        ├── external-secrets.yaml          # ESO Application
+        └── external-secrets-config.yaml   # ClusterSecretStore Application
 ```
 
 > `talosctl gen config` および `talosctl machineconfig patch` で生成されるファイルは `k8s/talos/` に配置され、シークレットを含むため `.gitignore` で除外している。
@@ -757,6 +777,155 @@ kubectl -n monitoring get secret kube-prometheus-stack-grafana \
 # 6. ArgoCD Application 状態
 kubectl -n argocd get applications
 # → monitoring, monitoring-config, loki, alloy, tempo, opentelemetry 全て Synced/Healthy
+```
+
+## Secret 管理 (Vault + External Secrets Operator)
+
+HashiCorp Vault (HA Raft 3ノード) + External Secrets Operator で K8s Secret を GitOps 管理する。
+
+### アーキテクチャ
+
+```
+[Vault] (10.5.0.3, vault.internal.onoe.dev, TLS)
+  ├── HA Raft storage (3 replicas, anti-affinity)
+  ├── KV v2 Secret Engine (path: secret/)
+  └── Kubernetes Auth (ESO 用 ServiceAccount)
+
+[External Secrets Operator] (external-secrets namespace)
+  └── ClusterSecretStore → Vault KV v2
+
+[ExternalSecret CR] (各 namespace)
+  ↓ ESO が定期的に同期
+[K8s Secret] (自動生成)
+```
+
+| 項目 | 値 |
+|------|-----|
+| Vault VIP | 10.5.0.3 |
+| Vault UI | https://vault.internal.onoe.dev |
+| Namespace | vault, external-secrets |
+
+### デプロイ手順
+
+#### Phase 1: Vault
+
+1. `k8s/vault/` と ArgoCD Apps を Git push
+2. ArgoCD sync: cert-manager → TLS 証明書 → Vault pods 起動 (sealed 状態)
+3. **手動**: Vault 初期化
+
+```bash
+# vault pod にポートフォワード
+kubectl -n vault port-forward vault-0 8200:8200
+
+export VAULT_ADDR=https://127.0.0.1:8200
+export VAULT_CACERT=<path-to-ca.crt>
+
+# 初期化 (unseal keys を安全に保管すること)
+vault operator init -key-shares=3 -key-threshold=2
+
+# Unseal (各 pod で 2回ずつ実施)
+vault operator unseal  # key 1
+vault operator unseal  # key 2
+
+# vault-1, vault-2 も同様に unseal
+kubectl -n vault port-forward vault-1 8200:8200
+vault operator unseal
+vault operator unseal
+
+kubectl -n vault port-forward vault-2 8200:8200
+vault operator unseal
+vault operator unseal
+```
+
+4. **手動**: Vault 設定
+
+```bash
+# Root token でログイン
+vault login
+
+# KV v2 有効化
+vault secrets enable -path=secret kv-v2
+
+# Kubernetes auth 有効化
+vault auth enable kubernetes
+vault write auth/kubernetes/config \
+  kubernetes_host="https://kubernetes.default.svc:443"
+
+# ESO 用 policy 作成
+vault policy write external-secrets - <<EOF
+path "secret/data/*" {
+  capabilities = ["read"]
+}
+EOF
+
+# ESO 用 role 作成
+vault write auth/kubernetes/role/external-secrets \
+  bound_service_account_names=external-secrets \
+  bound_service_account_namespaces=external-secrets \
+  policies=external-secrets \
+  ttl=1h
+```
+
+#### Phase 2: External Secrets Operator
+
+5. `k8s/external-secrets/` と ArgoCD Apps を Git push
+6. ArgoCD sync: ESO Operator → ClusterSecretStore
+
+#### Phase 3: 既存 Secret 移行
+
+7. **手動**: 既存 Secret 値を Vault に格納
+
+```bash
+vault kv put secret/monitoring/alertmanager-slack-webhook \
+  url='https://hooks.slack.com/services/T.../B.../xxx'
+
+vault kv put secret/monitoring/pve-exporter-credentials \
+  user='monitor@pve' \
+  token_name='prometheus' \
+  token_value='<token-value>'
+
+# rook-ceph (import-external-cluster.sh の出力値を使用)
+vault kv put secret/rook-ceph/rook-ceph-mon \
+  cluster-name='rook-ceph' \
+  fsid='<fsid>' \
+  admin-secret='<admin-key>' \
+  mon-secret='' \
+  ceph-username='client.admin' \
+  ceph-secret='<admin-key>'
+
+vault kv put secret/rook-ceph/rook-ceph-config \
+  mon_host='[v2:10.1.1.11:3300],[v2:10.1.1.12:3300],[v2:10.1.1.13:3300]' \
+  mon_initial_members='mandolin1,mandolin2,mandolin3'
+
+vault kv put secret/rook-ceph/rook-csi-rbd-provisioner \
+  userID='csi-rbd-provisioner' \
+  userKey='<cephx-key>'
+
+vault kv put secret/rook-ceph/rook-csi-rbd-node \
+  userID='csi-rbd-node' \
+  userKey='<cephx-key>'
+```
+
+8. ExternalSecret CRs を Git push
+9. ESO が K8s Secret を自動生成
+
+### 検証
+
+```bash
+# Vault HA status
+kubectl -n vault get pods  # vault-0,1,2 Running
+vault status               # Sealed=false
+vault operator raft list-peers  # 3 voters
+
+# DNS/TLS
+dig @10.5.0.53 vault.internal.onoe.dev  # → 10.5.0.3
+curl -k https://vault.internal.onoe.dev:8200/v1/sys/health
+
+# ESO
+kubectl get clustersecretstore vault  # Ready=True
+
+# 既存 Secret 移行確認
+kubectl -n monitoring get externalsecret  # SecretSynced=True
 ```
 
 ## 関連ドキュメント

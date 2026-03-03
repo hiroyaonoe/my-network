@@ -656,6 +656,10 @@ Root Application (k8s/argocd/apps/)
 ├── alloy               … Grafana Alloy ログ転送 DaemonSet (multi-source)
 ├── tempo               … Grafana Tempo 分散トレース (multi-source)
 ├── opentelemetry       … OTel Collector トレース収集 (multi-source)
+├── vault              … HashiCorp Vault (HA Raft, Secret 管理)
+├── vault-config       … Vault TLS Certificate マニフェスト
+├── external-secrets   … External Secrets Operator (Helm)
+├── external-secrets-config … ClusterSecretStore マニフェスト
 └── (将来のアプリ)       … Application YAML を追加するだけ
 ```
 
@@ -820,7 +824,70 @@ Worker あたり約 770Mi request。各 8GB RAM で十分収容可能。
 3. **Slack Webhook URL 取得**: Incoming Webhooks 設定
 4. **K8s Secrets 作成**: `alertmanager-slack-webhook`, `pve-exporter-credentials` (monitoring namespace)
 
-## 13. 将来の拡張案
+## 13. Secret 管理 (Vault + External Secrets Operator)
+
+### 13.1 概要
+
+K8s Secret を GitOps 管理するため、HashiCorp Vault と External Secrets Operator (ESO) を導入する。
+Vault に Secret 値を格納し、ESO が ExternalSecret CR に基づいて K8s Secret を自動生成する。
+
+| 項目 | 値 |
+|------|-----|
+| Vault | vault namespace, HA Raft 3ノード |
+| Vault UI | https://vault.internal.onoe.dev (10.5.0.3, LoadBalancer) |
+| ESO | external-secrets namespace |
+| Secret Store | ClusterSecretStore (Vault KV v2, Kubernetes auth) |
+| TLS | cert-manager (internal-ca ClusterIssuer) |
+
+### 13.2 アーキテクチャ
+
+```
+[Vault] (10.5.0.3, vault.internal.onoe.dev, TLS)
+  ├── HA Raft storage (3 replicas, anti-affinity)
+  ├── KV v2 Secret Engine (path: secret/)
+  └── Kubernetes Auth (ESO 用 ServiceAccount)
+
+[External Secrets Operator] (external-secrets namespace)
+  └── ClusterSecretStore → Vault KV v2
+
+[ExternalSecret CR] (各 namespace)
+  ↓ ESO が定期的に同期
+[K8s Secret] (自動生成)
+  ↓
+[Workload] (Alertmanager, PVE Exporter 等)
+```
+
+### 13.3 LoadBalancer VIP 割り当て
+
+| VIP | ホスト名 | 用途 |
+|-----|---------|------|
+| 10.5.0.1 | argocd.internal.onoe.dev | ArgoCD |
+| 10.5.0.2 | grafana.internal.onoe.dev | Grafana |
+| 10.5.0.3 | vault.internal.onoe.dev | Vault |
+| 10.5.0.53 | (DNS) | k8s-gateway |
+
+### 13.4 手動前提条件
+
+Vault デプロイ後に以下の手動操作が必要:
+
+1. **Vault 初期化**: `vault operator init -key-shares=3 -key-threshold=2`
+2. **Vault Unseal**: `vault operator unseal` ×2回 (各 Pod で実施)
+3. **KV v2 有効化**: `vault secrets enable -path=secret kv-v2`
+4. **Kubernetes Auth 設定**: `vault auth enable kubernetes` + ESO 用 policy/role 作成
+5. **既存 Secret 格納**: `vault kv put secret/monitoring/alertmanager-slack-webhook url=...` 等
+
+### 13.5 既存 Secret 移行
+
+| ExternalSecret | Vault Path | K8s Secret | Namespace |
+|---------------|-----------|-----------|-----------|
+| alertmanager-slack-webhook | monitoring/alertmanager-slack-webhook | alertmanager-slack-webhook | monitoring |
+| pve-exporter-credentials | monitoring/pve-exporter-credentials | pve-exporter-credentials | monitoring |
+| rook-ceph-mon | rook-ceph/rook-ceph-mon | rook-ceph-mon | rook-ceph |
+| rook-ceph-config | rook-ceph/rook-ceph-config | rook-ceph-config | rook-ceph |
+| rook-csi-rbd-provisioner | rook-ceph/rook-csi-rbd-provisioner | rook-csi-rbd-provisioner | rook-ceph |
+| rook-csi-rbd-node | rook-ceph/rook-csi-rbd-node | rook-csi-rbd-node | rook-ceph |
+
+## 14. 将来の拡張案
 
 - **NIC増設・スイッチ更新**: マルチギガビット対応スイッチへの更新で帯域向上が可能。
 - **Ceph OSD追加**: 各ノードにSSDを追加することでCeph容量・性能を拡張可能。
