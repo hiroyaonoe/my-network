@@ -1,0 +1,52 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: vm-alerts
+  namespace: monitoring
+  labels:
+    release: monitoring
+spec:
+  groups:
+    - name: vm.rules
+      rules:
+        - alert: ProxmoxNodeDown
+          expr: |
+            pve_up == 0
+          for: 2m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Proxmox node {{ $labels.instance }} is down"
+            description: "Proxmox node {{ $labels.instance }} is unreachable for 2 minutes."
+
+        - alert: ProxmoxVMDown
+          expr: |
+            pve_guest_info{status!="running", template="false"} == 1
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Proxmox VM {{ $labels.name }} (ID: {{ $labels.id }}) is not running"
+            description: "VM {{ $labels.name }} on node {{ $labels.instance }} has been in {{ $labels.status }} state for 5 minutes."
+
+        - alert: ProxmoxVMHighCPU
+          expr: |
+            pve_cpu_usage_ratio * 100 > 90
+            and pve_guest_info{template="false"} == 1
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Proxmox VM {{ $labels.name }} CPU usage is high"
+            description: "VM {{ $labels.name }} on node {{ $labels.instance }} CPU usage is above 90% for 10 minutes (current: {{ $value | printf \"%.1f\" }}%)."
+
+        - alert: ProxmoxVMHighMemory
+          expr: |
+            pve_memory_usage_bytes / pve_memory_size_bytes * 100 > 90
+            and pve_guest_info{template="false"} == 1
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Proxmox VM {{ $labels.name }} memory usage is high"
+            description: "VM {{ $labels.name }} on node {{ $labels.instance }} memory usage is above 90% for 5 minutes (current: {{ $value | printf \"%.1f\" }}%)."

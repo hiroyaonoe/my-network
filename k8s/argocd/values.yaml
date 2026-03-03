@@ -12,6 +12,12 @@ server:
       kind: ClusterIssuer
       group: cert-manager.io
 
+global:
+  monitoring:
+    enabled: true
+    serviceMonitor:
+      enabled: true
+
 configs:
   params:
     server.insecure: false

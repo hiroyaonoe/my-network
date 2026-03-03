@@ -1,0 +1,80 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: kubernetes-alerts
+  namespace: monitoring
+  labels:
+    release: monitoring
+spec:
+  groups:
+    - name: kubernetes-pods.rules
+      rules:
+        - alert: KubePodOOMKilled
+          expr: |
+            kube_pod_container_status_last_terminated_reason{reason="OOMKilled"}
+            * on(namespace, pod, container) group_left()
+            (time() - kube_pod_container_status_last_terminated_finished_time < 1800) > 0
+          labels:
+            severity: warning
+          annotations:
+            summary: "Pod {{ $labels.namespace }}/{{ $labels.pod }} container {{ $labels.container }} was OOMKilled"
+            description: "Container {{ $labels.container }} in pod {{ $labels.namespace }}/{{ $labels.pod }} was OOMKilled in the last 30 minutes."
+
+        - alert: KubePodPendingTooLong
+          expr: |
+            kube_pod_status_phase{phase="Pending"} == 1
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Pod {{ $labels.namespace }}/{{ $labels.pod }} has been Pending for more than 15 minutes"
+            description: "Pod {{ $labels.namespace }}/{{ $labels.pod }} has been in Pending state for more than 15 minutes. Check scheduling constraints and resource availability."
+
+        - alert: KubeContainerHighCPUUsage
+          expr: |
+            sum by (namespace, pod, container) (rate(container_cpu_usage_seconds_total[5m]))
+            /
+            sum by (namespace, pod, container) (kube_pod_container_resource_requests{resource="cpu"})
+            > 1.5
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Container {{ $labels.namespace }}/{{ $labels.pod }}/{{ $labels.container }} CPU usage exceeds 150% of request"
+            description: "Container {{ $labels.container }} in pod {{ $labels.namespace }}/{{ $labels.pod }} is using more than 150% of its CPU request for 10 minutes."
+
+        - alert: KubeContainerHighMemoryUsage
+          expr: |
+            sum by (namespace, pod, container) (container_memory_working_set_bytes)
+            /
+            sum by (namespace, pod, container) (kube_pod_container_resource_limits{resource="memory"})
+            > 0.9
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Container {{ $labels.namespace }}/{{ $labels.pod }}/{{ $labels.container }} memory usage exceeds 90% of limit"
+            description: "Container {{ $labels.container }} in pod {{ $labels.namespace }}/{{ $labels.pod }} is using more than 90% of its memory limit for 5 minutes. OOMKill risk."
+
+        - alert: KubeDaemonSetNotScheduled
+          expr: |
+            kube_daemonset_status_desired_number_scheduled
+            - kube_daemonset_status_current_number_scheduled
+            > 0
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "DaemonSet {{ $labels.namespace }}/{{ $labels.daemonset }} has unscheduled pods"
+            description: "DaemonSet {{ $labels.namespace }}/{{ $labels.daemonset }} has {{ $value }} desired pods that are not scheduled."
+
+        - alert: KubeStatefulSetDown
+          expr: |
+            kube_statefulset_status_replicas_ready == 0
+            and kube_statefulset_status_replicas > 0
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "StatefulSet {{ $labels.namespace }}/{{ $labels.statefulset }} has no ready replicas"
+            description: "StatefulSet {{ $labels.namespace }}/{{ $labels.statefulset }} has 0 ready replicas for 5 minutes."

@@ -1,0 +1,132 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: host-alerts
+  namespace: monitoring
+  labels:
+    release: monitoring
+spec:
+  groups:
+    - name: host.rules
+      rules:
+        - alert: HostHighCpuLoad
+          expr: |
+            100 - (avg by (instance) (rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 80
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Host {{ $labels.instance }} CPU load is high"
+            description: "Host {{ $labels.instance }} CPU usage is above 80% for 10 minutes (current: {{ $value | printf \"%.1f\" }}%)."
+
+        - alert: HostOutOfMemory
+          expr: |
+            node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes * 100 < 10
+          for: 2m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Host {{ $labels.instance }} is out of memory"
+            description: "Host {{ $labels.instance }} has less than 10% available memory (current: {{ $value | printf \"%.1f\" }}%)."
+
+        - alert: HostSwapIsFillingUp
+          expr: |
+            (1 - node_memory_SwapFree_bytes / node_memory_SwapTotal_bytes) * 100 > 80
+          for: 2m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Host {{ $labels.instance }} swap usage is high"
+            description: "Host {{ $labels.instance }} swap usage is above 80% (current: {{ $value | printf \"%.1f\" }}%)."
+
+        - alert: HostOomKillDetected
+          expr: |
+            increase(node_vmstat_oom_kill[1m]) > 0
+          labels:
+            severity: warning
+          annotations:
+            summary: "Host {{ $labels.instance }} OOM kill detected"
+            description: "OOM kill detected on host {{ $labels.instance }}."
+
+        - alert: HostCpuHighIowait
+          expr: |
+            avg by (instance) (rate(node_cpu_seconds_total{mode="iowait"}[5m])) * 100 > 10
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Host {{ $labels.instance }} CPU iowait is high"
+            description: "Host {{ $labels.instance }} CPU iowait is above 10% for 5 minutes (current: {{ $value | printf \"%.1f\" }}%)."
+
+        - alert: HostUnusualDiskReadLatency
+          expr: |
+            rate(node_disk_read_time_seconds_total[1m])
+            / rate(node_disk_reads_completed_total[1m])
+            > 0.1
+            and rate(node_disk_reads_completed_total[1m]) > 0
+          for: 2m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Host {{ $labels.instance }} disk {{ $labels.device }} read latency is high"
+            description: "Disk read latency on {{ $labels.instance }} device {{ $labels.device }} is above 100ms (current: {{ $value | printf \"%.3f\" }}s)."
+
+        - alert: HostUnusualDiskWriteLatency
+          expr: |
+            rate(node_disk_write_time_seconds_total[1m])
+            / rate(node_disk_writes_completed_total[1m])
+            > 0.1
+            and rate(node_disk_writes_completed_total[1m]) > 0
+          for: 2m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Host {{ $labels.instance }} disk {{ $labels.device }} write latency is high"
+            description: "Disk write latency on {{ $labels.instance }} device {{ $labels.device }} is above 100ms (current: {{ $value | printf \"%.3f\" }}s)."
+
+        - alert: HostFilesystemDeviceError
+          expr: |
+            node_filesystem_device_error != 0
+          for: 2m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Host {{ $labels.instance }} filesystem device error"
+            description: "Filesystem device error detected on {{ $labels.instance }} (device: {{ $labels.device }}, mountpoint: {{ $labels.mountpoint }})."
+
+        - alert: HostPhysicalComponentTooHot
+          expr: |
+            node_hwmon_temp_celsius > node_hwmon_temp_max_celsius
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Host {{ $labels.instance }} physical component is too hot"
+            description: "Physical component on {{ $labels.instance }} temperature is above max threshold (current: {{ $value }}°C)."
+
+        - alert: HostNodeOvertemperatureAlarm
+          expr: |
+            node_hwmon_temp_crit_alarm_celsius == 1
+          labels:
+            severity: critical
+          annotations:
+            summary: "Host {{ $labels.instance }} critical temperature alarm"
+            description: "Critical temperature alarm triggered on {{ $labels.instance }}."
+
+        - alert: HostEdacCorrectableErrors
+          expr: |
+            increase(node_edac_correctable_errors_total[1m]) > 0
+          labels:
+            severity: info
+          annotations:
+            summary: "Host {{ $labels.instance }} EDAC correctable errors detected"
+            description: "Correctable ECC memory errors detected on {{ $labels.instance }}."
+
+        - alert: HostEdacUncorrectableErrors
+          expr: |
+            increase(node_edac_uncorrectable_errors_total[1m]) > 0
+          labels:
+            severity: warning
+          annotations:
+            summary: "Host {{ $labels.instance }} EDAC uncorrectable errors detected"
+            description: "Uncorrectable ECC memory errors detected on {{ $labels.instance }}. Hardware replacement may be needed."

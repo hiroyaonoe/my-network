@@ -1,5 +1,48 @@
 # --- Grafana ---
 grafana:
+  dashboards:
+    kubernetes:
+      k8s-views-global:
+        gnetId: 15757
+        revision: 1
+        datasource: Prometheus
+      k8s-views-namespaces:
+        gnetId: 15758
+        revision: 1
+        datasource: Prometheus
+      k8s-views-nodes:
+        gnetId: 15759
+        revision: 1
+        datasource: Prometheus
+      k8s-views-pods:
+        gnetId: 15760
+        revision: 1
+        datasource: Prometheus
+    argocd:
+      argocd-operational:
+        gnetId: 19993
+        revision: 1
+        datasource: Prometheus
+      argocd-application:
+        gnetId: 19974
+        revision: 1
+        datasource: Prometheus
+    proxmox:
+      proxmox-cluster:
+        gnetId: 10347
+        revision: 1
+        datasource: Prometheus
+    ceph:
+      ceph-cluster:
+        gnetId: 7056
+        revision: 1
+        datasource: Prometheus
+    infrastructure:
+      node-exporter-full:
+        gnetId: 1860
+        revision: 1
+        datasource: Prometheus
+
   service:
     type: LoadBalancer
     loadBalancerIP: "10.5.0.2"
@@ -91,6 +134,25 @@ prometheus:
               - "10.1.1.13:9283"
             labels:
               cluster: mandolin
+      - job_name: pve
+        static_configs:
+          - targets:
+              - "10.1.1.11"
+              - "10.1.1.12"
+              - "10.1.1.13"
+            labels:
+              cluster: mandolin
+        metrics_path: /pve
+        params:
+          cluster: ["1"]
+          node: ["1"]
+        relabel_configs:
+          - source_labels: [__address__]
+            target_label: __param_target
+          - source_labels: [__param_target]
+            target_label: instance
+          - target_label: __address__
+            replacement: pve-exporter.monitoring.svc.cluster.local:9221
 
 # --- Alertmanager ---
 alertmanager:
