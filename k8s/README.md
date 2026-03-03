@@ -811,35 +811,19 @@ HashiCorp Vault (HA Raft 3ノード) + External Secrets Operator で K8s Secret 
 
 1. `k8s/vault/` と ArgoCD Apps を Git push
 2. ArgoCD sync: cert-manager → TLS 証明書 → Vault pods 起動 (sealed 状態)
-3. **手動**: Vault 初期化
+3. **手動**: Vault 初期化・Unseal・設定 (vault-0 コンテナ内で実施)
 
 ```bash
-# vault pod にポートフォワード
-kubectl -n vault port-forward vault-0 8200:8200
-
-export VAULT_ADDR=https://127.0.0.1:8200
-export VAULT_CACERT=<path-to-ca.crt>
+# vault-0 に exec (VAULT_ADDR, VAULT_CACERT は環境変数で設定済み)
+kubectl -n vault exec -it vault-0 -- sh
 
 # 初期化 (unseal keys を安全に保管すること)
 vault operator init -key-shares=3 -key-threshold=2
 
-# Unseal (各 pod で 2回ずつ実施)
+# vault-0 を Unseal (2回)
 vault operator unseal  # key 1
 vault operator unseal  # key 2
 
-# vault-1, vault-2 も同様に unseal
-kubectl -n vault port-forward vault-1 8200:8200
-vault operator unseal
-vault operator unseal
-
-kubectl -n vault port-forward vault-2 8200:8200
-vault operator unseal
-vault operator unseal
-```
-
-4. **手動**: Vault 設定
-
-```bash
 # Root token でログイン
 vault login
 
@@ -852,7 +836,7 @@ vault write auth/kubernetes/config \
   kubernetes_host="https://kubernetes.default.svc:443"
 
 # ESO 用 policy 作成
-vault policy write external-secrets - <<EOF
+vault policy write external-secrets - <<'EOF'
 path "secret/data/*" {
   capabilities = ["read"]
 }
@@ -864,6 +848,17 @@ vault write auth/kubernetes/role/external-secrets \
   bound_service_account_namespaces=external-secrets \
   policies=external-secrets \
   ttl=1h
+
+exit
+```
+
+4. **手動**: vault-1, vault-2 を Unseal
+
+```bash
+kubectl -n vault exec -it vault-1 -- vault operator unseal  # key 1
+kubectl -n vault exec -it vault-1 -- vault operator unseal  # key 2
+kubectl -n vault exec -it vault-2 -- vault operator unseal  # key 1
+kubectl -n vault exec -it vault-2 -- vault operator unseal  # key 2
 ```
 
 #### Phase 2: External Secrets Operator
@@ -873,9 +868,12 @@ vault write auth/kubernetes/role/external-secrets \
 
 #### Phase 3: 既存 Secret 移行
 
-7. **手動**: 既存 Secret 値を Vault に格納
+7. **手動**: 既存 Secret 値を Vault に格納 (vault-0 コンテナ内で実施)
 
 ```bash
+kubectl -n vault exec -it vault-0 -- sh
+vault login
+
 vault kv put secret/monitoring/alertmanager-slack-webhook \
   url='https://hooks.slack.com/services/T.../B.../xxx'
 
@@ -904,6 +902,8 @@ vault kv put secret/rook-ceph/rook-csi-rbd-provisioner \
 vault kv put secret/rook-ceph/rook-csi-rbd-node \
   userID='csi-rbd-node' \
   userKey='<cephx-key>'
+
+exit
 ```
 
 8. ExternalSecret CRs を Git push
@@ -914,8 +914,8 @@ vault kv put secret/rook-ceph/rook-csi-rbd-node \
 ```bash
 # Vault HA status
 kubectl -n vault get pods  # vault-0,1,2 Running
-vault status               # Sealed=false
-vault operator raft list-peers  # 3 voters
+kubectl -n vault exec vault-0 -- vault status               # Sealed=false
+kubectl -n vault exec vault-0 -- vault operator raft list-peers  # 3 voters
 
 # DNS/TLS
 dig @10.5.0.53 vault.internal.onoe.dev  # → 10.5.0.3
