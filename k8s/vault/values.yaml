@@ -40,6 +40,8 @@ server:
 
   service:
     type: LoadBalancer
+    port: 443
+    targetPort: 8200
     loadBalancerIP: "10.5.0.3"
     annotations:
       external-dns.alpha.kubernetes.io/hostname: vault.internal.onoe.dev
