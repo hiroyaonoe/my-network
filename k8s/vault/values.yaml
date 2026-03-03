@@ -64,6 +64,10 @@ server:
       secret:
         secretName: vault-unseal-keys
         optional: true
+    - name: root-token
+      secret:
+        secretName: vault-root-token
+        optional: true
 
   volumeMounts:
     - name: tls
@@ -71,6 +75,9 @@ server:
       readOnly: true
     - name: unseal-keys
       mountPath: /vault/unseal-keys
+      readOnly: true
+    - name: root-token
+      mountPath: /vault/root-token
       readOnly: true
 
   postStart:

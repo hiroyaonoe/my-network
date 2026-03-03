@@ -859,17 +859,21 @@ exit
 kubectl -n vault create secret generic vault-unseal-keys \
   --from-literal=key-0='<unseal-key-1>' \
   --from-literal=key-1='<unseal-key-2>'
+kubectl -n vault create secret generic vault-root-token \
+  --from-literal=token='<root-token>'
 
-# Vault に unseal keys を格納 (ESO 移行用)
+# Vault に unseal keys と root token を格納 (ESO 移行用)
 kubectl -n vault exec -it vault-0 -- sh
 vault login
 vault kv put secret/vault/unseal-keys \
   key-0='<unseal-key-1>' \
   key-1='<unseal-key-2>'
+vault kv put secret/vault/root-token \
+  token='<root-token>'
 exit
 
 # 手動作成した Secret を削除 (ESO が ExternalSecret から再生成する)
-kubectl -n vault delete secret vault-unseal-keys
+kubectl -n vault delete secret vault-unseal-keys vault-root-token
 ```
 
 > Pod 起動時に postStart hook が unseal key を読み取り自動的に unseal する。
