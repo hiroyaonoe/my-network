@@ -1,0 +1,63 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pve-exporter
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/name: pve-exporter
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: pve-exporter
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: pve-exporter
+    spec:
+      containers:
+        - name: pve-exporter
+          image: prompve/prometheus-pve-exporter:3.8.1
+          ports:
+            - containerPort: 9221
+              name: metrics
+          env:
+            - name: PVE_USER
+              valueFrom:
+                secretKeyRef:
+                  name: pve-exporter-credentials
+                  key: user
+            - name: PVE_TOKEN_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: pve-exporter-credentials
+                  key: token_name
+            - name: PVE_TOKEN_VALUE
+              valueFrom:
+                secretKeyRef:
+                  name: pve-exporter-credentials
+                  key: token_value
+            - name: PVE_VERIFY_SSL
+              value: "false"
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              memory: 128Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: pve-exporter
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/name: pve-exporter
+spec:
+  type: ClusterIP
+  ports:
+    - port: 9221
+      targetPort: metrics
+      name: metrics
+  selector:
+    app.kubernetes.io/name: pve-exporter

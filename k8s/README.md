@@ -631,6 +631,19 @@ k8s/
 │   └── cluster-values.yaml                # Rook Ceph Cluster Helm values
 ├── k8s-gateway/
 │   └── values.yaml                         # k8s-gateway Helm values
+├── monitoring/
+│   ├── values.yaml                         # kube-prometheus-stack Helm values
+│   └── manifests/
+│       ├── grafana-certificate.yaml       # Grafana TLS Certificate
+│       └── pve-exporter.yaml              # PVE Exporter Deployment + Service
+├── loki/
+│   └── values.yaml                         # Loki Helm values
+├── alloy/
+│   └── values.yaml                         # Grafana Alloy Helm values
+├── tempo/
+│   └── values.yaml                         # Grafana Tempo Helm values
+├── opentelemetry/
+│   └── values.yaml                         # OTel Collector Helm values
 └── argocd/
     ├── values.yaml                         # ArgoCD Helm values
     ├── bootstrap/
@@ -643,10 +656,108 @@ k8s/
         ├── cert-manager-config.yaml       # cert-manager config Application
         ├── rook-ceph.yaml                 # Rook Operator Application
         ├── rook-ceph-cluster.yaml         # Rook Ceph Cluster Application
-        └── k8s-gateway.yaml               # k8s-gateway DNS Application
+        ├── k8s-gateway.yaml               # k8s-gateway DNS Application
+        ├── monitoring.yaml                # kube-prometheus-stack Application
+        ├── monitoring-config.yaml         # Grafana TLS + PVE Exporter Application
+        ├── loki.yaml                      # Loki Application
+        ├── alloy.yaml                     # Grafana Alloy Application
+        ├── tempo.yaml                     # Grafana Tempo Application
+        └── opentelemetry.yaml             # OTel Collector Application
 ```
 
 > `talosctl gen config` および `talosctl machineconfig patch` で生成されるファイルは `k8s/talos/` に配置され、シークレットを含むため `.gitignore` で除外している。
+
+## オブザーバビリティ (Grafana Stack)
+
+メトリクス (Prometheus)、ログ (Loki)、トレース (Tempo) のフルスタック可観測性環境。
+
+### アーキテクチャ
+
+```
+[Grafana] (10.5.0.2, grafana.internal.onoe.dev, TLS)
+  ├── datasource: Prometheus (metrics)
+  ├── datasource: Loki (logs)
+  └── datasource: Tempo (traces)
+
+[Prometheus] ← scrape ← node-exporter, kube-state-metrics, pve-exporter
+  ├── additionalScrapeConfigs → Ceph MGR (10.1.1.11-13:9283)
+  └── remoteWriteReceiver ← Tempo metrics-generator
+
+[Alertmanager] → Slack webhook (Secret)
+
+[Loki] (monolithic) ← [Alloy DaemonSet] (pod logs)
+
+[Tempo] (monolithic) ← [OTel Collector] ← apps (OTLP)
+  └── metrics-generator → Prometheus (RED metrics)
+```
+
+### 手動前提条件 (Git push 前)
+
+#### 1. Proxmox: API トークン作成
+
+```bash
+ssh root@10.1.1.11
+pveum user add monitor@pve
+pveum acl modify / -user monitor@pve -role PVEAuditor
+pveum user token add monitor@pve prometheus --privsep 0
+# → トークン値を記録
+```
+
+#### 2. Proxmox: Ceph Prometheus Module 有効化
+
+```bash
+ssh root@10.1.1.11
+ceph mgr module enable prometheus
+# 確認: curl http://10.1.1.11:9283/metrics | head
+```
+
+#### 3. Slack: Webhook URL 取得
+
+https://api.slack.com/apps → Create New App → Incoming Webhooks → Add to Channel
+
+#### 4. K8s: Secrets 作成
+
+```bash
+kubectl create namespace monitoring
+
+kubectl -n monitoring create secret generic alertmanager-slack-webhook \
+  --from-literal=url='https://hooks.slack.com/services/T.../B.../xxx'
+
+kubectl -n monitoring create secret generic pve-exporter-credentials \
+  --from-literal=user='monitor@pve' \
+  --from-literal=token_name='prometheus' \
+  --from-literal=token_value='<token-value>'
+```
+
+### デプロイ (ArgoCD 自動)
+
+`k8s/argocd/apps/` 配下の monitoring, monitoring-config, loki, alloy, tempo, opentelemetry が main にマージされると ArgoCD が自動デプロイする。
+
+### 検証
+
+```bash
+# 1. 全 Pod 起動確認
+kubectl -n monitoring get pods
+kubectl -n loki get pods
+kubectl -n alloy get pods
+kubectl -n tempo get pods
+kubectl -n opentelemetry get pods
+
+# 2. Grafana TLS アクセス
+curl -k https://grafana.internal.onoe.dev
+
+# 3. Grafana 初期パスワード
+kubectl -n monitoring get secret kube-prometheus-stack-grafana \
+  -o jsonpath="{.data.admin-password}" | base64 -d
+
+# 4. Loki ログ確認 (Grafana Explore → Loki → {namespace="monitoring"})
+
+# 5. Ceph メトリクス確認 (Grafana Explore → Prometheus → ceph_health_status)
+
+# 6. ArgoCD Application 状態
+kubectl -n argocd get applications
+# → monitoring, monitoring-config, loki, alloy, tempo, opentelemetry 全て Synced/Healthy
+```
 
 ## 関連ドキュメント
 

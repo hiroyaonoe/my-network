@@ -1,0 +1,15 @@
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: grafana-server-tls
+  namespace: monitoring
+spec:
+  secretName: grafana-server-tls
+  duration: 8760h # 1 year
+  renewBefore: 720h # 30 days
+  dnsNames:
+    - grafana.internal.onoe.dev
+  issuerRef:
+    name: internal-ca
+    kind: ClusterIssuer
+    group: cert-manager.io

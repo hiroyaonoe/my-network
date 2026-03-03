@@ -650,6 +650,12 @@ Root Application (k8s/argocd/apps/)
 ├── rook-ceph           … Rook Operator + CSI ドライバ (multi-source)
 ├── rook-ceph-cluster   … CephCluster CR + StorageClass (multi-source)
 ├── k8s-gateway         … HA DNS サーバー (multi-source)
+├── monitoring          … kube-prometheus-stack (multi-source, ServerSideApply)
+├── monitoring-config   … Grafana TLS Certificate + PVE Exporter マニフェスト
+├── loki                … Loki ログ収集 (multi-source)
+├── alloy               … Grafana Alloy ログ転送 DaemonSet (multi-source)
+├── tempo               … Grafana Tempo 分散トレース (multi-source)
+├── opentelemetry       … OTel Collector トレース収集 (multi-source)
 └── (将来のアプリ)       … Application YAML を追加するだけ
 ```
 
@@ -755,7 +761,66 @@ sudo security add-trusted-cert -d -r trustRoot \
   -k /Library/Keychains/System.keychain internal-ca.crt
 ```
 
-## 12. 将来の拡張案
+## 12. オブザーバビリティ (Grafana Stack)
+
+### 12.1 概要
+
+K8s クラスタにフルスタックのオブザーバビリティ環境を構築する。
+メトリクス監視 (CPU/メモリ/Pod 状態)、ログ収集・可視化、分散トレース収集・可視化、アラート → Slack 通知、Proxmox/Ceph/VM 監視を提供する。
+
+### 12.2 アーキテクチャ
+
+```
+[Grafana] (10.5.0.2, grafana.internal.onoe.dev, TLS)
+  ├── datasource: Prometheus (metrics)
+  ├── datasource: Loki (logs)
+  └── datasource: Tempo (traces)
+
+[Prometheus] ← scrape ← node-exporter, kube-state-metrics, pve-exporter
+  ├── additionalScrapeConfigs → Ceph MGR (10.1.1.11-13:9283)
+  └── remoteWriteReceiver ← Tempo metrics-generator
+
+[Alertmanager] → Slack webhook (Secret)
+
+[Loki] (monolithic) ← [Alloy DaemonSet] (pod logs)
+
+[Tempo] (monolithic) ← [OTel Collector] ← apps (OTLP)
+  └── metrics-generator → Prometheus (RED metrics)
+```
+
+### 12.3 Namespace 構成
+
+| Namespace | コンポーネント |
+|-----------|-------------|
+| monitoring | kube-prometheus-stack (Prometheus, Grafana, Alertmanager, node-exporter, kube-state-metrics, operator) + pve-exporter + Grafana TLS cert |
+| loki | Loki (monolithic) |
+| alloy | Grafana Alloy (DaemonSet) |
+| tempo | Grafana Tempo (monolithic) |
+| opentelemetry | OTel Collector (Deployment) |
+
+### 12.4 ストレージ・リソース見積もり
+
+| PVC | サイズ | リソース Request (CPU/Mem) |
+|-----|-------|--------------------------|
+| Prometheus TSDB | 50Gi | 200m / 512Mi |
+| Alertmanager | 5Gi | 50m / 64Mi |
+| Grafana | 10Gi | 100m / 256Mi |
+| Loki | 30Gi | 100m / 256Mi |
+| Tempo | 20Gi | 100m / 256Mi |
+| **合計** | **115Gi** | **~1.5 cores / ~2.3Gi** |
+
+Worker あたり約 770Mi request。各 8GB RAM で十分収容可能。
+
+### 12.5 手動前提条件
+
+デプロイ前に以下を実施する:
+
+1. **Proxmox API トークン作成**: `monitor@pve` ユーザー + `prometheus` トークン (PVEAuditor ロール)
+2. **Ceph Prometheus Module 有効化**: `ceph mgr module enable prometheus` (ポート 9283)
+3. **Slack Webhook URL 取得**: Incoming Webhooks 設定
+4. **K8s Secrets 作成**: `alertmanager-slack-webhook`, `pve-exporter-credentials` (monitoring namespace)
+
+## 13. 将来の拡張案
 
 - **NIC増設・スイッチ更新**: マルチギガビット対応スイッチへの更新で帯域向上が可能。
 - **Ceph OSD追加**: 各ノードにSSDを追加することでCeph容量・性能を拡張可能。
