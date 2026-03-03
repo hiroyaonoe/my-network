@@ -6,3 +6,15 @@ resources:
     memory: 64Mi
   limits:
     memory: 256Mi
+
+certController:
+  enabled: false
+
+webhook:
+  certManager:
+    enabled: true
+    cert:
+      issuerRef:
+        name: internal-ca
+        kind: ClusterIssuer
+        group: cert-manager.io
