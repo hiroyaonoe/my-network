@@ -852,14 +852,30 @@ vault write auth/kubernetes/role/external-secrets \
 exit
 ```
 
-4. **手動**: vault-1, vault-2 を Unseal
+4. **手動**: 自動 unseal 用 Secret を作成 (init で取得した unseal key のうち threshold 分)
 
 ```bash
-kubectl -n vault exec -it vault-1 -- vault operator unseal  # key 1
-kubectl -n vault exec -it vault-1 -- vault operator unseal  # key 2
-kubectl -n vault exec -it vault-2 -- vault operator unseal  # key 1
-kubectl -n vault exec -it vault-2 -- vault operator unseal  # key 2
+# ブートストラップ用 (初回のみ手動作成)
+kubectl -n vault create secret generic vault-unseal-keys \
+  --from-literal=key-0='<unseal-key-1>' \
+  --from-literal=key-1='<unseal-key-2>'
+
+# Vault に unseal keys を格納 (ESO 移行用)
+kubectl -n vault exec -it vault-0 -- sh
+vault login
+vault kv put secret/vault/unseal-keys \
+  key-0='<unseal-key-1>' \
+  key-1='<unseal-key-2>'
+exit
+
+# 手動作成した Secret を削除 (ESO が ExternalSecret から再生成する)
+kubectl -n vault delete secret vault-unseal-keys
 ```
+
+> Pod 起動時に postStart hook が unseal key を読み取り自動的に unseal する。
+> vault-1, vault-2 は Raft retry_join でリーダーに join 後、自動 unseal される。
+> ブートストラップ後は ESO が Vault から unseal keys を同期するため手動管理不要。
+> 全 Vault pod が同時停止しても、K8s Secret は残っているため自動復旧する。
 
 #### Phase 2: External Secrets Operator
 

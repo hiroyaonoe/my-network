@@ -60,11 +60,30 @@ server:
     - name: tls
       secret:
         secretName: vault-server-tls
+    - name: unseal-keys
+      secret:
+        secretName: vault-unseal-keys
+        optional: true
 
   volumeMounts:
     - name: tls
       mountPath: /vault/tls
       readOnly: true
+    - name: unseal-keys
+      mountPath: /vault/unseal-keys
+      readOnly: true
+
+  postStart:
+    - /bin/sh
+    - -c
+    - |
+      (
+        sleep 10
+        if [ -f /vault/unseal-keys/key-0 ]; then
+          vault operator unseal "$(cat /vault/unseal-keys/key-0)" 2>/dev/null || true
+          vault operator unseal "$(cat /vault/unseal-keys/key-1)" 2>/dev/null || true
+        fi
+      ) &
 
   extraEnvironmentVars:
     VAULT_CACERT: /vault/tls/ca.crt

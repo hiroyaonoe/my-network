@@ -886,6 +886,7 @@ Vault デプロイ後に以下の手動操作が必要:
 | rook-ceph-config | rook-ceph/rook-ceph-config | rook-ceph-config | rook-ceph |
 | rook-csi-rbd-provisioner | rook-ceph/rook-csi-rbd-provisioner | rook-csi-rbd-provisioner | rook-ceph |
 | rook-csi-rbd-node | rook-ceph/rook-csi-rbd-node | rook-csi-rbd-node | rook-ceph |
+| vault-unseal-keys | vault/unseal-keys | vault-unseal-keys | vault |
 
 ## 14. 将来の拡張案
 
