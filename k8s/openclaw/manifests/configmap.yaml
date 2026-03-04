@@ -58,7 +58,13 @@ data:
       // ===================
       tools: {
         fs: { workspaceOnly: true },
-        exec: { security: "full" },
+        exec: {
+          security: "allowlist",
+          safeBins: [
+            "grep", "sed", "awk", "sort", "uniq",
+            "tr", "cut", "tee", "jq", "xargs", "fmt",
+          ],
+        },
         loopDetection: {
           enabled: true,
           historySize: 30,
@@ -218,4 +224,42 @@ data:
           imageMaxDimensionPx: 800,
         },
       },
+    }
+  exec-approvals.json: |
+    {
+      "version": 1,
+      "defaults": {
+        "security": "allowlist",
+        "ask": "off",
+        "askFallback": "deny"
+      },
+      "agents": {
+        "main": {
+          "security": "allowlist",
+          "ask": "off",
+          "allowlist": [
+            {"pattern": "/usr/bin/ls"},
+            {"pattern": "/usr/bin/cat"},
+            {"pattern": "/usr/bin/head"},
+            {"pattern": "/usr/bin/tail"},
+            {"pattern": "/usr/bin/wc"},
+            {"pattern": "/usr/bin/diff"},
+            {"pattern": "/usr/bin/find"},
+            {"pattern": "/usr/bin/file"},
+            {"pattern": "/usr/bin/stat"},
+            {"pattern": "/usr/bin/realpath"},
+            {"pattern": "/usr/bin/basename"},
+            {"pattern": "/usr/bin/dirname"},
+            {"pattern": "/usr/bin/mkdir"},
+            {"pattern": "/usr/bin/touch"},
+            {"pattern": "/usr/bin/cp"},
+            {"pattern": "/usr/bin/mv"},
+            {"pattern": "/usr/bin/rm"},
+            {"pattern": "/usr/bin/chmod"},
+            {"pattern": "/usr/bin/git"},
+            {"pattern": "/usr/bin/curl"},
+            {"pattern": "/usr/bin/wget"}
+          ]
+        }
+      }
     }

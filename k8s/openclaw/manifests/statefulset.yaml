@@ -48,14 +48,35 @@ spec:
           env:
             - name: OPENCLAW_CONFIG_PATH
               value: /config/openclaw.json
-          envFrom:
-            - secretRef:
-                name: openclaw-secrets
+            - name: SLACK_APP_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: openclaw-secrets
+                  key: SLACK_APP_TOKEN
+            - name: SLACK_BOT_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: openclaw-secrets
+                  key: SLACK_BOT_TOKEN
+            - name: LLM_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: openclaw-secrets
+                  key: LLM_API_KEY
+            - name: GATEWAY_AUTH_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: openclaw-secrets
+                  key: GATEWAY_AUTH_TOKEN
           volumeMounts:
             - name: data
               mountPath: /home/node/.openclaw
             - name: config
               mountPath: /config
+              readOnly: true
+            - name: config
+              mountPath: /home/node/.openclaw/exec-approvals.json
+              subPath: exec-approvals.json
               readOnly: true
             - name: tls
               mountPath: /tls
