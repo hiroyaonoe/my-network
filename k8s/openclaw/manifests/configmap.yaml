@@ -61,10 +61,6 @@ data:
         fs: { workspaceOnly: true },
         exec: {
           security: "allowlist",
-          safeBins: [
-            "grep", "sed", "awk", "sort", "uniq",
-            "tr", "cut", "tee", "jq", "xargs", "fmt",
-          ],
         },
         loopDetection: {
           enabled: true,
@@ -112,9 +108,9 @@ data:
             apiKey: "${LLM_API_KEY}",
             baseUrl: "https://api.anthropic.com",
             models: [
-              { id: "claude-opus-4-6" },
-              { id: "claude-sonnet-4-5" },
-              { id: "claude-haiku-4-5" },
+              { name: "claude-opus-4-6" },
+              { name: "claude-sonnet-4-5" },
+              { name: "claude-haiku-4-5" },
             ],
           },
         },
