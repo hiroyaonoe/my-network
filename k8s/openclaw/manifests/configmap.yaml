@@ -32,8 +32,7 @@ data:
           mode: "socket",
           appToken: "${SLACK_APP_TOKEN}",
           botToken: "${SLACK_BOT_TOKEN}",
-          dmPolicy: "allowlist",
-          allowFrom: [],
+          dmPolicy: "open",
           replyToMode: "off",
         },
       },
@@ -59,7 +58,7 @@ data:
       // ===================
       tools: {
         fs: { workspaceOnly: true },
-        exec: { security: "ask" },
+        exec: { security: "allowlist" },
         loopDetection: {
           enabled: true,
           historySize: 30,
@@ -104,6 +103,12 @@ data:
         providers: {
           anthropic: {
             apiKey: "${LLM_API_KEY}",
+            baseUrl: "https://api.anthropic.com",
+            models: [
+              "claude-opus-4-6",
+              "claude-sonnet-4-5",
+              "claude-haiku-4-5",
+            ],
           },
         },
       },
