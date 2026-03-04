@@ -635,6 +635,17 @@ k8s/
 │       ├── externalsecret-rook-ceph-config.yaml       # ExternalSecret
 │       ├── externalsecret-rook-csi-rbd-provisioner.yaml # ExternalSecret
 │       └── externalsecret-rook-csi-rbd-node.yaml      # ExternalSecret
+├── openclaw/
+│   └── manifests/
+│       ├── statefulset.yaml              # StatefulSet + headless Service
+│       ├── service.yaml                  # LoadBalancer Service (Control UI)
+│       ├── certificate.yaml             # TLS Certificate (cert-manager)
+│       ├── configmap.yaml               # openclaw.json
+│       ├── externalsecret.yaml          # ExternalSecret (Vault → tokens/API keys)
+│       ├── networkpolicy-default-deny.yaml           # Default deny all
+│       ├── networkpolicy-allow-dns.yaml              # Allow DNS to CoreDNS
+│       ├── networkpolicy-allow-external-http.yaml    # Allow HTTP/HTTPS to external
+│       └── networkpolicy-allow-ui-ingress.yaml       # Allow ingress to Control UI
 ├── node-reboot/
 │   └── manifests/
 │       ├── externalsecret-talosconfig.yaml # ExternalSecret (Vault → talosconfig)
@@ -693,7 +704,8 @@ k8s/
         ├── vault-config.yaml              # Vault TLS Certificate Application
         ├── external-secrets.yaml          # ESO Application
         ├── external-secrets-config.yaml   # ClusterSecretStore Application
-        └── node-reboot.yaml              # Node Periodic Reboot Application
+        ├── node-reboot.yaml              # Node Periodic Reboot Application
+        └── openclaw.yaml                # OpenClaw AI Gateway Application
 ```
 
 > `talosctl gen config` および `talosctl machineconfig patch` で生成されるファイルは `k8s/talos/` に配置され、シークレットを含むため `.gitignore` で除外している。
@@ -957,6 +969,101 @@ kubectl get clustersecretstore vault  # Ready=True
 
 # 既存 Secret 移行確認
 kubectl -n monitoring get externalsecret  # SecretSynced=True
+```
+
+## OpenClaw (AI Coding Agent Gateway)
+
+チャットアプリ (Slack 等) と AI コーディングエージェントを接続するセルフホスト型ゲートウェイ。VM (opencraw-01) から K8s コンテナに移行。
+
+### アーキテクチャ
+
+```
+[StatefulSet] (openclaw namespace, 1 replica)
+  ├── image: ghcr.io/openclaw/openclaw:latest
+  ├── port: 18789 (gateway + Control UI, TLS)
+  ├── PVC: 32Gi (ceph-block) → /home/node/.openclaw
+  ├── ConfigMap → init container でコピー
+  ├── ExternalSecret → Vault (tokens/API keys)
+  └── Certificate → cert-manager (internal-ca)
+
+[Service] openclaw-ui (LoadBalancer)
+  └── 443 → 18789, openclaw.internal.onoe.dev
+
+[NetworkPolicy] (4段階)
+  ├── default-deny-all
+  ├── allow-dns → kube-system/kube-dns
+  ├── allow-external-http → 0.0.0.0/0 (except 10.0.0.0/8) on 80/443
+  └── allow-ui-ingress → port 18789
+```
+
+### 手動前提条件 (Git push 前)
+
+```bash
+# 1. Vault にシークレット格納
+kubectl -n vault exec -it vault-0 -- sh
+vault login
+vault kv put secret/openclaw/config \
+  slack_app_token="xapp-..." \
+  slack_bot_token="xoxb-..." \
+  llm_api_key="sk-..." \
+  gateway_auth_token="<generated-token>"
+exit
+```
+
+> Vault ポリシー `external-secrets` は `secret/data/*` の read を許可済みのため、追加設定は不要。
+
+### デプロイ (ArgoCD 自動)
+
+`k8s/argocd/apps/openclaw.yaml` が main にマージされると、ArgoCD が自動的に openclaw namespace にデプロイする。
+
+### セットアップ (デプロイ後)
+
+```bash
+# 1. Pod 確認
+kubectl get pods -n openclaw
+
+# 2. Control UI
+open https://openclaw.internal.onoe.dev
+# Settings → gateway token を入力してペアリング
+
+# 3. Onboarding
+kubectl exec -it -n openclaw openclaw-0 -- openclaw onboard
+
+# 4. ステータス確認
+kubectl exec -n openclaw openclaw-0 -- openclaw status
+```
+
+### 検証
+
+```bash
+# 1. Pod Running + Ready
+kubectl get pods -n openclaw
+
+# 2. ExternalSecret → Secret 生成確認
+kubectl -n openclaw get externalsecret
+
+# 3. TLS 証明書発行確認
+kubectl get certificate -n openclaw
+
+# 4. DNS
+nslookup openclaw.internal.onoe.dev
+
+# 5. Control UI
+curl -k https://openclaw.internal.onoe.dev
+
+# 6. DNS 疎通 (Pod 内)
+kubectl exec -n openclaw openclaw-0 -- nslookup google.com
+
+# 7. 外部疎通
+kubectl exec -n openclaw openclaw-0 -- wget -qO- https://api.slack.com/
+
+# 8. 内部遮断
+kubectl exec -n openclaw openclaw-0 -- wget -T 5 -qO- http://10.2.0.1
+# → タイムアウト
+
+# 9. PVC
+kubectl get pvc -n openclaw
+# → 32Gi Bound
 ```
 
 ## ノード定期リブート (node-reboot)
