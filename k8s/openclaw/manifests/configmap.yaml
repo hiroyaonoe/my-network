@@ -6,6 +6,9 @@ metadata:
 data:
   openclaw.json: |
     {
+      // ===================
+      // Gateway
+      // ===================
       gateway: {
         port: 18789,
         bind: "lan",
@@ -14,7 +17,15 @@ data:
           cert: "/tls/tls.crt",
           key: "/tls/tls.key",
         },
+        controlUi: {
+          allowedOrigins: ["https://openclaw.internal.onoe.dev"],
+          dangerouslyDisableDeviceAuth: true,
+        },
       },
+
+      // ===================
+      // Channels
+      // ===================
       channels: {
         slack: {
           enabled: true,
@@ -23,8 +34,83 @@ data:
           botToken: "${SLACK_BOT_TOKEN}",
           dmPolicy: "allowlist",
           allowFrom: [],
+          replyToMode: "off",
         },
       },
+
+      // ===================
+      // Discovery
+      // ===================
+      discovery: {
+        mdns: { mode: "off" },
+      },
+
+      // ===================
+      // Logging
+      // ===================
+      logging: {
+        consoleStyle: "json",
+        consoleLevel: "info",
+        redactSensitive: "tools",
+      },
+
+      // ===================
+      // Tools
+      // ===================
+      tools: {
+        fs: { workspaceOnly: true },
+        exec: { security: "ask" },
+        loopDetection: {
+          enabled: true,
+          historySize: 30,
+          warningThreshold: 5,
+          criticalThreshold: 10,
+        },
+      },
+
+      // ===================
+      // Session
+      // ===================
+      session: {
+        reset: {
+          mode: "daily",
+          atHour: 4,
+        },
+        idleMinutes: 120,
+        maintenance: {
+          pruneAfter: "30d",
+          maxEntries: 200,
+          maxDiskBytes: "20gb",
+          highWaterBytes: "16gb",
+        },
+      },
+
+      // ===================
+      // Messages
+      // ===================
+      messages: {
+        queue: {
+          mode: "collect",
+          debounceMs: 1500,
+          cap: 10,
+          drop: "summarize",
+        },
+      },
+
+      // ===================
+      // Models (provider auth)
+      // ===================
+      models: {
+        providers: {
+          anthropic: {
+            apiKey: "${LLM_API_KEY}",
+          },
+        },
+      },
+
+      // ===================
+      // Agents
+      // ===================
       agents: {
         defaults: {
           // --- Model Selection ---
@@ -66,6 +152,13 @@ data:
           // --- Thinking (off/minimal/low/medium/high/xhigh) ---
           thinkingDefault: "low",
 
+          // --- Timezone ---
+          userTimezone: "Asia/Tokyo",
+          timeFormat: "24",
+
+          // --- Typing ---
+          typingMode: "thinking",
+
           // --- Context Pruning (prevent stale tool results from inflating input tokens) ---
           contextPruning: {
             mode: "cache-ttl",
@@ -95,18 +188,24 @@ data:
           bootstrapMaxChars: 15000,
           bootstrapTotalMaxChars: 80000,
 
-          // --- Heartbeat (use cheapest model) ---
+          // --- Heartbeat (use cheapest model, active hours only) ---
           heartbeat: {
             every: "55m",
             model: "anthropic/claude-haiku-4-5",
             includeReasoning: false,
             ackMaxChars: 300,
+            activeHours: {
+              start: "09:00",
+              end: "00:00",
+              timezone: "Asia/Tokyo",
+            },
           },
 
           // --- Subagents (use cheaper model for simple tasks) ---
           subagents: {
             model: "anthropic/claude-haiku-4-5",
             maxConcurrent: 1,
+            runTimeoutSeconds: 300,
             archiveAfterMinutes: 60,
           },
 

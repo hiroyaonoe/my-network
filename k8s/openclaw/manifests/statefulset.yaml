@@ -60,6 +60,8 @@ spec:
             - name: tls
               mountPath: /tls
               readOnly: true
+            - name: tmp
+              mountPath: /tmp
           resources:
             requests:
               cpu: 500m
@@ -87,6 +89,7 @@ spec:
           securityContext:
             runAsNonRoot: true
             runAsUser: 1000
+            readOnlyRootFilesystem: true
             privileged: false
             allowPrivilegeEscalation: false
             capabilities:
@@ -101,6 +104,8 @@ spec:
         - name: tls
           secret:
             secretName: openclaw-server-tls
+        - name: tmp
+          emptyDir: {}
   volumeClaimTemplates:
     - metadata:
         name: data
