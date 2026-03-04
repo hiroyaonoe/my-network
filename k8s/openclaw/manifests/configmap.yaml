@@ -58,7 +58,7 @@ data:
       // ===================
       tools: {
         fs: { workspaceOnly: true },
-        exec: { security: "allowlist" },
+        exec: { security: "full" },
         loopDetection: {
           enabled: true,
           historySize: 30,
