@@ -98,17 +98,20 @@ spec:
               port: gateway
               scheme: HTTPS
             periodSeconds: 5
+            timeoutSeconds: 5
             failureThreshold: 30
           readinessProbe:
             httpGet:
               path: /readyz
               port: gateway
               scheme: HTTPS
+            timeoutSeconds: 5
           livenessProbe:
             httpGet:
               path: /healthz
               port: gateway
               scheme: HTTPS
+            timeoutSeconds: 5
           securityContext:
             runAsNonRoot: true
             runAsUser: 1000
