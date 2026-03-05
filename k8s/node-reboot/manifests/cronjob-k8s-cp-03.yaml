@@ -17,22 +17,45 @@ spec:
       template:
         spec:
           restartPolicy: Never
-          containers:
-            - name: reboot
-              image: ghcr.io/siderolabs/talosctl:v1.12.4
-              command: ["sh", "/scripts/reboot-cp.sh", "10.2.0.68"]
+          initContainers:
+            - name: check-etcd
+              image: alpine:3.21
+              command:
+                - sh
+                - -ec
+                - |
+                  wget -q -O /usr/local/bin/talosctl "https://github.com/siderolabs/talos/releases/download/v1.12.4/talosctl-linux-amd64"
+                  chmod +x /usr/local/bin/talosctl
+                  talosctl --talosconfig="$TALOSCONFIG" --endpoints="$NODE_IP" --nodes="$NODE_IP" etcd status
+                  MEMBER_COUNT=$(talosctl --talosconfig="$TALOSCONFIG" --endpoints="$NODE_IP" --nodes="$NODE_IP" etcd members 2>/dev/null | tail -n +2 | wc -l)
+                  if [ "$MEMBER_COUNT" -lt 3 ]; then
+                    echo "ERROR: etcd member count is $MEMBER_COUNT (expected >= 3). Aborting reboot."
+                    exit 1
+                  fi
+                  echo "etcd health check passed. Member count: $MEMBER_COUNT"
+              env:
+                - name: NODE_IP
+                  value: "10.2.0.68"
+                - name: TALOSCONFIG
+                  value: "/var/run/secrets/talosconfig/talosconfig"
               volumeMounts:
                 - name: talosconfig
                   mountPath: /var/run/secrets/talosconfig
                   readOnly: true
-                - name: reboot-scripts
-                  mountPath: /scripts
+          containers:
+            - name: reboot
+              image: ghcr.io/siderolabs/talosctl:v1.12.4
+              command:
+                - talosctl
+                - --talosconfig=/var/run/secrets/talosconfig/talosconfig
+                - --endpoints=10.2.0.68
+                - --nodes=10.2.0.68
+                - reboot
+              volumeMounts:
+                - name: talosconfig
+                  mountPath: /var/run/secrets/talosconfig
                   readOnly: true
           volumes:
             - name: talosconfig
               secret:
                 secretName: talosconfig
-            - name: reboot-scripts
-              configMap:
-                name: reboot-scripts
-                defaultMode: 0755

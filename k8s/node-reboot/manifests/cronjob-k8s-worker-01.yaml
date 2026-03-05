@@ -20,19 +20,17 @@ spec:
           containers:
             - name: reboot
               image: ghcr.io/siderolabs/talosctl:v1.12.4
-              command: ["sh", "/scripts/reboot-worker.sh", "10.2.0.69"]
+              command:
+                - talosctl
+                - --talosconfig=/var/run/secrets/talosconfig/talosconfig
+                - --endpoints=10.2.0.69
+                - --nodes=10.2.0.69
+                - reboot
               volumeMounts:
                 - name: talosconfig
                   mountPath: /var/run/secrets/talosconfig
-                  readOnly: true
-                - name: reboot-scripts
-                  mountPath: /scripts
                   readOnly: true
           volumes:
             - name: talosconfig
               secret:
                 secretName: talosconfig
-            - name: reboot-scripts
-              configMap:
-                name: reboot-scripts
-                defaultMode: 0755
