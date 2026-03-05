@@ -11,7 +11,7 @@ data:
       // ===================
       gateway: {
         port: 18789,
-        bind: "0.0.0.0",
+        bind: "auto",
         auth: { token: "${GATEWAY_AUTH_TOKEN}" },
         tls: {
           cert: "/tls/tls.crt",
