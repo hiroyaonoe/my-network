@@ -975,38 +975,131 @@ kubectl -n monitoring get externalsecret  # SecretSynced=True
 
 チャットアプリ (Slack 等) と AI コーディングエージェントを接続するセルフホスト型ゲートウェイ。VM (opencraw-01) から K8s コンテナに移行。
 
+ref: https://github.com/hiroyaonoe/my-network/issues/11
+
 ### アーキテクチャ
 
 ```
 [StatefulSet] (openclaw namespace, 1 replica)
   ├── image: ghcr.io/openclaw/openclaw:latest
-  ├── port: 18789 (gateway + Control UI, TLS)
+  ├── port: 18789 (gateway + Control UI, wss://)
   ├── PVC: 32Gi (ceph-block) → /home/node/.openclaw
-  ├── ConfigMap → init container でコピー
+  ├── ConfigMap → openclaw.json (OPENCLAW_CONFIG_PATH), exec-approvals.json (subPath)
   ├── ExternalSecret → Vault (tokens/API keys)
-  └── Certificate → cert-manager (internal-ca)
+  └── TLS: gateway.tls.enabled=true (自己生成証明書)
+
+[Service] openclaw (headless)
+  └── ClusterIP: None (StatefulSet 必須)
 
 [Service] openclaw-ui (LoadBalancer)
   └── 443 → 18789, openclaw.internal.onoe.dev
 
 [NetworkPolicy] (4段階)
-  ├── default-deny-all
-  ├── allow-dns → kube-system/kube-dns
-  ├── allow-external-http → 0.0.0.0/0 (except 10.0.0.0/8) on 80/443
-  └── allow-ui-ingress → port 18789
+  ├── default-deny-all (ingress + egress 全拒否)
+  ├── allow-dns → kube-system/kube-dns (UDP/TCP 53)
+  ├── allow-external-http → 0.0.0.0/0 (except 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16) on TCP 80/443
+  └── allow-ui-ingress → TCP 18789
 ```
+
+### リソース要件
+
+| | requests | limits |
+|---|---|---|
+| CPU | 200m | 2 |
+| Memory | 512Mi | 2Gi |
+
+- Node.js プロセスの実測値: アイドル 300-500MB、通常 500MB-1GB、長時間セッション最大 1.9GB
+- `NODE_OPTIONS=--max-old-space-size=1536` で V8 ヒープを 1.5GB にキャップ
+- ワーカーノードは 6.8GB RAM のため、limits を 2Gi に制限
+
+### 設定ファイル
+
+#### openclaw.json (ConfigMap)
+
+JSON5 形式。主要な設定:
+
+| セクション | 設定内容 |
+|---|---|
+| `gateway` | port 18789, bind "lan", auth token, TLS enabled, Control UI |
+| `channels.slack` | Socket Mode (WebSocket), dmPolicy "open" |
+| `discovery` | mDNS off |
+| `logging` | JSON 形式, info レベル |
+| `tools` | fs workspaceOnly, exec allowlist, loopDetection |
+| `session` | daily reset (04:00), idle 120min, 30d prune |
+| `models.providers.anthropic` | apiKey, baseUrl, models (opus/sonnet/haiku) |
+| `agents.defaults` | primary: sonnet-4-5, thinking: low, context: 200k, pruning, compaction, heartbeat |
+
+秘匿値は `${VAR}` プレースホルダーで環境変数から解決 (OpenClaw ネイティブ機能)。
+
+#### exec-approvals.json (ConfigMap, subPath マウント)
+
+exec ツールの allowlist 設定。許可するコマンドを定義。
+
+### ボリューム構成
+
+| マウント先 | ソース | 用途 |
+|---|---|---|
+| `/home/node/.openclaw` | PVC 32Gi (ceph-block) | セッション、ワークスペース等の永続データ |
+| `/config/openclaw.json` | ConfigMap | 設定ファイル (OPENCLAW_CONFIG_PATH で参照) |
+| `/home/node/.openclaw/exec-approvals.json` | ConfigMap (subPath) | exec allowlist |
+| `/tls` | Secret (cert-manager) | TLS 証明書 (将来の cert-manager 連携用に保持) |
+| `/tmp` | emptyDir | 一時ファイル |
+
+### TLS
+
+- `gateway.tls.enabled: true` により自己生成証明書で wss:// リスニング
+- cert-manager 証明書 (`/tls/tls.crt`, `/tls/tls.key`) はマウント済みだが、gateway は `cert`/`key` フィールドを無視して自己生成する
+- cert-manager 証明書への切り替えは issue #12 で対応予定
+- `.dev` gTLD は HSTS preload により HTTPS 必須
+
+### セキュリティ
+
+#### SecurityContext
+- `runAsNonRoot: true`, `runAsUser: 1000` (node ユーザー)
+- `privileged: false`, `allowPrivilegeEscalation: false`
+- `capabilities.drop: ["ALL"]`, `seccompProfile: RuntimeDefault`
+
+#### Pod レベル
+- `automountServiceAccountToken: false` (K8s API アクセス不可)
+- hostNetwork/hostPID/hostIPC なし
+
+#### ネットワーク隔離
+- Default deny all → DNS のみ許可 → 外部 HTTP/HTTPS のみ許可 (プライベートアドレス全拒否)
+- 内部ネットワーク (10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16) への通信は全て遮断
+
+#### exec ツール
+- `tools.exec.security: "allowlist"` + `exec-approvals.json` で許可コマンドを限定
+- 環境変数は個別に `secretKeyRef` で注入 (`envFrom` ではなく `env` を使用し、シェルからの全変数列挙を防止)
 
 ### 手動前提条件 (Git push 前)
 
+#### 1. Slack Bot 作成
+
+1. https://api.slack.com/apps で新規 App 作成
+2. **Socket Mode** を有効化 → App-Level Token (`xapp-...`) を取得
+3. **OAuth & Permissions** → Bot Token Scopes: `chat:write`, `im:history`, `im:read`, `im:write`
+4. ワークスペースにインストール → Bot Token (`xoxb-...`) を取得
+
+#### 2. Gateway Auth Token 生成
+
 ```bash
-# 1. Vault にシークレット格納
+openssl rand -hex 32
+```
+
+#### 3. Anthropic API Key 取得
+
+https://console.anthropic.com/ で API Key (`sk-ant-...`) を取得。
+
+#### 4. Vault にシークレット格納
+
+```bash
 kubectl -n vault exec -it vault-0 -- sh
 vault login
 vault kv put secret/openclaw/config \
   slack_app_token="xapp-..." \
   slack_bot_token="xoxb-..." \
-  llm_api_key="sk-..." \
-  gateway_auth_token="<generated-token>"
+  llm_api_key="sk-ant-..." \
+  gateway_auth_token="<step 2 で生成した値>"
 exit
 ```
 
@@ -1018,53 +1111,130 @@ exit
 
 ### セットアップ (デプロイ後)
 
+#### 1. Pod 起動確認
+
 ```bash
-# 1. Pod 確認
 kubectl get pods -n openclaw
+# → openclaw-0  1/1  Running
 
-# 2. Control UI
+kubectl logs -n openclaw openclaw-0
+# → "listening on wss://0.0.0.0:18789" が表示されること
+# → "slack socket mode connected" が表示されること
+```
+
+#### 2. Control UI アクセス
+
+```bash
 open https://openclaw.internal.onoe.dev
-# Settings → gateway token を入力してペアリング
+```
 
-# 3. Onboarding
+> 自己署名証明書のため、ブラウザで証明書警告が出る。cert-manager の CA をシステムに信頼させるか、警告を許可して続行。
+
+#### 3. Control UI ペアリング
+
+1. Control UI にアクセス
+2. Gateway Auth Token (手順 2 で生成した値) を入力してペアリング
+3. `dangerouslyDisableDeviceAuth: true` のためデバイス認証はスキップされる
+
+#### 4. Onboarding (オプション)
+
+```bash
 kubectl exec -it -n openclaw openclaw-0 -- openclaw onboard
+```
 
-# 4. ステータス確認
+対話形式でセットアップウィザードが起動。ConfigMap で設定済みの場合はスキップ可。
+
+#### 5. ステータス確認
+
+```bash
 kubectl exec -n openclaw openclaw-0 -- openclaw status
 ```
+
+確認ポイント:
+- Gateway: `wss://` で listening
+- Channels: Slack ON / OK
+- Agents: model `claude-sonnet-4-5`
+- Sessions: 表示されること
+
+#### 6. Slack 動作確認
+
+Slack で Bot に DM を送信し、応答があることを確認。
 
 ### 検証
 
 ```bash
 # 1. Pod Running + Ready
 kubectl get pods -n openclaw
+# → 1/1 Running
 
 # 2. ExternalSecret → Secret 生成確認
 kubectl -n openclaw get externalsecret
+# → SecretSynced
 
 # 3. TLS 証明書発行確認
 kubectl get certificate -n openclaw
+# → Ready: True
 
-# 4. DNS
+# 4. DNS 解決
 nslookup openclaw.internal.onoe.dev
+# → 10.5.0.2
 
-# 5. Control UI
-curl -k https://openclaw.internal.onoe.dev
+# 5. Control UI アクセス
+curl -sk https://openclaw.internal.onoe.dev | head -5
+# → HTML が返ること
 
 # 6. DNS 疎通 (Pod 内)
 kubectl exec -n openclaw openclaw-0 -- nslookup google.com
+# → 正常解決
 
-# 7. 外部疎通
+# 7. 外部疎通 (Slack API)
 kubectl exec -n openclaw openclaw-0 -- wget -qO- https://api.slack.com/
+# → レスポンスあり
 
-# 8. 内部遮断
+# 8. 内部ネットワーク遮断
 kubectl exec -n openclaw openclaw-0 -- wget -T 5 -qO- http://10.2.0.1
-# → タイムアウト
+# → タイムアウト (NetworkPolicy で遮断)
 
 # 9. PVC
 kubectl get pvc -n openclaw
-# → 32Gi Bound
+# → data-openclaw-0  32Gi  Bound
 ```
+
+### トラブルシューティング
+
+#### Pod が起動しない (startup probe 失敗)
+
+```bash
+# イベント確認
+kubectl get events -n openclaw --field-selector involvedObject.name=openclaw-0 --sort-by='.lastTimestamp'
+
+# ログ確認
+kubectl logs -n openclaw openclaw-0
+```
+
+- `connection refused`: Gateway プロセスがまだ起動中。起動には 30-40 秒程度かかる
+- `context deadline exceeded`: TLS ハンドシェイクがタイムアウト。probe の `timeoutSeconds` が短い可能性 (現在 5s)
+- `http: server gave HTTP response to HTTPS client`: TLS が有効になっていない。`gateway.tls.enabled: true` を確認
+
+#### ノードが NotReady になる
+
+- OpenClaw の memory limit がノードの物理メモリを超えていないか確認
+- 現在のワーカーノードは 6.8GB RAM。limit は 2Gi に設定済み
+- `kubectl describe node <node>` の Allocated resources で overcommit を確認
+
+#### ConfigMap 変更が反映されない
+
+- ConfigMap は直接マウントのため、更新は自動反映される (kubelet の sync 間隔: 約 60 秒)
+- ただし OpenClaw の設定変更は Pod 再起動が必要な場合がある:
+  ```bash
+  kubectl delete pod -n openclaw openclaw-0
+  ```
+
+### 既知の制限事項
+
+- **TLS 証明書**: Gateway は `tls.cert`/`tls.key` フィールドを無視し自己生成証明書を使用する (issue #12)
+- **`/healthz`, `/readyz`**: 専用のヘルスエンドポイントではなく、SPA の catch-all で HTTP 200 を返す
+- **exec allowlist**: `exec-approvals.json` は subPath でマウント。ConfigMap 更新時は Pod 再起動が必要
 
 ## ノード定期リブート (node-reboot)
 
