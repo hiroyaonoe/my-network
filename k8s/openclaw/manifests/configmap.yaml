@@ -14,6 +14,7 @@ data:
         bind: "lan",
         auth: { token: "${GATEWAY_AUTH_TOKEN}" },
         tls: {
+          enabled: true,
           cert: "/tls/tls.crt",
           key: "/tls/tls.key",
         },
