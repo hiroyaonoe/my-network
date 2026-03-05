@@ -46,6 +46,8 @@ spec:
             - name: gateway
               containerPort: 18789
           env:
+            - name: NODE_OPTIONS
+              value: "--max-old-space-size=1536"
             - name: OPENCLAW_CONFIG_PATH
               value: /config/openclaw.json
             - name: SLACK_APP_TOKEN
@@ -85,11 +87,11 @@ spec:
               mountPath: /tmp
           resources:
             requests:
-              cpu: 500m
-              memory: 1Gi
+              cpu: 200m
+              memory: 512Mi
             limits:
-              cpu: "4"
-              memory: 16Gi
+              cpu: "2"
+              memory: 2Gi
           startupProbe:
             httpGet:
               path: /healthz
