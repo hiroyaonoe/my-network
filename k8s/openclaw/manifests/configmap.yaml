@@ -43,7 +43,7 @@ data:
           channelMentionPolicy: {
             default: "mention-required",
             channels: {
-              with-openclaw: "always-listen"
+              "with-openclaw": "always-listen"
             },
           },
         },
