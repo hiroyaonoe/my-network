@@ -34,6 +34,7 @@ data:
           appToken: "${SLACK_APP_TOKEN}",
           botToken: "${SLACK_BOT_TOKEN}",
           dmPolicy: "open",
+          groupPolicy: "open",
           allowFrom: ["*"],
           replyToMode: "off",
         },
