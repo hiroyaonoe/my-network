@@ -1,0 +1,21 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: openclaw
+
+resources:
+  - certificate.yaml
+  - externalsecret.yaml
+  - headless-service.yaml
+  - networkpolicy-allow-dns.yaml
+  - networkpolicy-allow-external-http.yaml
+  - networkpolicy-allow-ui-ingress.yaml
+  - networkpolicy-default-deny.yaml
+  - service.yaml
+  - statefulset.yaml
+
+configMapGenerator:
+  - name: openclaw-config
+    files:
+      - config/openclaw.json
+      - config/exec-approvals.json
