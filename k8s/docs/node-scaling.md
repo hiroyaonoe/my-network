@@ -101,11 +101,18 @@ kubectl drain k8s-worker-01 --ignore-daemonsets --delete-emptydir-data
 ### Phase 3: etcd メンバー削除
 
 ```bash
-# 1. cp-02, cp-03 を etcd から削除
-talosctl --nodes 10.2.0.66 etcd remove-member k8s-cp-02
-talosctl --nodes 10.2.0.66 etcd remove-member k8s-cp-03
+# 1. etcd メンバー ID を確認
+talosctl --nodes 10.2.0.66 etcd members
+# → ID (16桁の16進数), HOSTNAME, PEER URLS が表示される
+#    例: ac116a9530506c52  k8s-cp-02  https://10.2.0.67:2380
+#        1ddcd87332950850  k8s-cp-03  https://10.2.0.68:2380
 
-# 2. 確認
+# 2. cp-02, cp-03 をメンバー ID で etcd から削除
+#    注意: ホスト名や IP ではなく ID を指定する
+talosctl --nodes 10.2.0.66 etcd remove-member <cp-02-member-id>
+talosctl --nodes 10.2.0.66 etcd remove-member <cp-03-member-id>
+
+# 3. 確認
 talosctl --nodes 10.2.0.66 etcd members
 # → k8s-cp-01 のみ
 ```
