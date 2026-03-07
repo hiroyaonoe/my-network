@@ -1,201 +1,201 @@
-# K8s Node Scaling Guide
+# K8s ノードスケーリングガイド
 
-## Overview
+## 概要
 
-Memory resource constraints on Proxmox nodes (mandolin1-3) require reducing K8s nodes from 6 (3 CP + 3 Worker) to 3 (1 CP + 2 Worker).
+Proxmox ノード (mandolin1-3) のメモリリソース不足のため、K8s ノード数を 6 (3 CP + 3 Worker) から 3 (1 CP + 2 Worker) に削減した。
 
-Each physical machine retains one VM. Stopped VMs and Talos patch files are preserved for future HA restoration.
+各物理マシンに 1 VM を残し、停止した VM と Talos パッチファイルは将来の HA 復帰のため保持している。
 
-### Current Configuration (Reduced)
+### 現在の構成 (縮退)
 
-| Node | IP | Physical Host | Role | Status |
-|------|-----|---------------|------|--------|
-| k8s-cp-01 | 10.2.0.66 | mandolin1 | control-plane | Running |
-| k8s-cp-02 | 10.2.0.67 | mandolin2 | control-plane | Stopped |
-| k8s-cp-03 | 10.2.0.68 | mandolin3 | control-plane | Stopped |
-| k8s-worker-01 | 10.2.0.69 | mandolin1 | worker | Stopped |
-| k8s-worker-02 | 10.2.0.70 | mandolin2 | worker | Running |
-| k8s-worker-03 | 10.2.0.71 | mandolin3 | worker | Running |
+| ノード | IP | 物理マシン | 役割 | 状態 |
+|--------|-----|-----------|------|------|
+| k8s-cp-01 | 10.2.0.66 | mandolin1 | control-plane | 稼働中 |
+| k8s-cp-02 | 10.2.0.67 | mandolin2 | control-plane | 停止中 |
+| k8s-cp-03 | 10.2.0.68 | mandolin3 | control-plane | 停止中 |
+| k8s-worker-01 | 10.2.0.69 | mandolin1 | worker | 停止中 |
+| k8s-worker-02 | 10.2.0.70 | mandolin2 | worker | 稼働中 |
+| k8s-worker-03 | 10.2.0.71 | mandolin3 | worker | 稼働中 |
 
-### Changes from HA Configuration
+### HA 構成との差分
 
-| Component | HA (6 nodes) | Reduced (3 nodes) |
-|-----------|-------------|-------------------|
+| コンポーネント | HA (6 ノード) | 縮退 (3 ノード) |
+|---------------|-------------|-----------------|
 | Vault | 3 replicas (HA Raft) | 1 replica (standalone) |
 | k8s-gateway | 3 replicas | 2 replicas |
-| node-reboot | 6 CronJobs | Removed |
-| etcd | 3 members | 1 member |
+| node-reboot | 6 CronJobs | 削除済み |
+| etcd | 3 メンバー | 1 メンバー |
 
-## Node Reduction Procedure (6 → 3)
+## ノード削減手順 (6 → 3)
 
-### Phase 1: Vault HA → Standalone
+### Phase 1: Vault HA → standalone
 
 ```bash
-# 1. Confirm vault-0 is the leader
+# 1. vault-0 がリーダーであることを確認
 kubectl -n vault exec vault-0 -- vault operator raft list-peers
 
-# 2. Remove vault-1, vault-2 from Raft peers
+# 2. vault-1, vault-2 を Raft ピアから削除
 kubectl -n vault exec vault-0 -- vault operator raft remove-peer vault-1
 kubectl -n vault exec vault-0 -- vault operator raft remove-peer vault-2
 
 # 3. Git push (values.yaml: replicas: 1) → ArgoCD sync
 
-# 4. Delete unused PVCs
+# 4. 不要な PVC を削除
 kubectl -n vault delete pvc data-vault-1 data-vault-2
 ```
 
-### Phase 2: Workload Evacuation
+### Phase 2: ワークロード退避
 
 ```bash
-# 1. Cordon nodes to be removed
+# 1. 削除ノードを cordon
 kubectl cordon k8s-cp-02
 kubectl cordon k8s-cp-03
 kubectl cordon k8s-worker-01
 
-# 2. Drain (ignore DaemonSets)
+# 2. drain (DaemonSet は無視)
 kubectl drain k8s-cp-02 --ignore-daemonsets --delete-emptydir-data
 kubectl drain k8s-cp-03 --ignore-daemonsets --delete-emptydir-data
 kubectl drain k8s-worker-01 --ignore-daemonsets --delete-emptydir-data
 ```
 
-### Phase 3: etcd Member Removal
+### Phase 3: etcd メンバー削除
 
 ```bash
-# 1. Remove cp-02, cp-03 from etcd
+# 1. cp-02, cp-03 を etcd から削除
 talosctl --nodes 10.2.0.66 etcd remove-member k8s-cp-02
 talosctl --nodes 10.2.0.66 etcd remove-member k8s-cp-03
 
-# 2. Verify
+# 2. 確認
 talosctl --nodes 10.2.0.66 etcd members
-# → k8s-cp-01 only
+# → k8s-cp-01 のみ
 ```
 
-### Phase 4: Node Deletion
+### Phase 4: ノード削除
 
 ```bash
-# 1. Delete nodes from K8s
+# 1. K8s からノード削除
 kubectl delete node k8s-cp-02
 kubectl delete node k8s-cp-03
 kubectl delete node k8s-worker-01
 
-# 2. Stop VMs in Proxmox (do NOT delete — preserved for HA restoration)
+# 2. Proxmox で VM 停止 (削除しない: 将来 HA 復帰用)
 # mandolin2: qm stop 102002 (k8s-cp-02)
 # mandolin3: qm stop 102003 (k8s-cp-03)
 # mandolin1: qm stop 102004 (k8s-worker-01)
 ```
 
-### Phase 5: Git Push & Verification
+### Phase 5: Git push & 確認
 
 ```bash
-# 1. Push node-reboot removal + Vault/k8s-gateway updates
+# 1. node-reboot 削除 + Vault/k8s-gateway 更新を push
 
-# 2. Verify ArgoCD sync
+# 2. ArgoCD sync 確認
 kubectl -n argocd get applications
 
-# 3. Verify all pods
+# 3. 全 Pod 確認
 kubectl get pods --all-namespaces
 ```
 
-## HA Restoration Procedure (3 → 6)
+## HA 構成への復帰手順 (3 → 6)
 
-### Phase 1: Start Stopped VMs
+### Phase 1: 停止 VM の起動
 
 ```bash
-# Start VMs in Proxmox
+# Proxmox で VM 起動
 # mandolin2: qm start 102002 (k8s-cp-02)
 # mandolin3: qm start 102003 (k8s-cp-03)
 # mandolin1: qm start 102004 (k8s-worker-01)
 
-# Wait for VMs to boot and get IPs
+# VM 起動待ち
 ping -c 3 10.2.0.67
 ping -c 3 10.2.0.68
 ping -c 3 10.2.0.69
 ```
 
-### Phase 2: Talos Bootstrap (Re-join)
+### Phase 2: Talos 再参加
 
-Existing VMs should have Talos installed. If disks were wiped, re-apply machine configs from `k8s/talos/`.
+既存 VM には Talos がインストール済み。ディスクが初期化された場合は `k8s/talos/` から machine config を再適用する。
 
 ```bash
-# Re-apply machine config if needed
+# 必要に応じて machine config を再適用
 cd k8s/talos
 talosctl apply-config -n 10.2.0.67 -f k8s-cp-02.yaml
 talosctl apply-config -n 10.2.0.68 -f k8s-cp-03.yaml
 talosctl apply-config -n 10.2.0.69 -f k8s-worker-01.yaml
 ```
 
-### Phase 3: etcd & K8s Join
+### Phase 3: etcd & K8s 参加
 
-Control plane nodes need to rejoin etcd and K8s.
+CP ノードは etcd と K8s に再参加する必要がある。
 
 ```bash
-# Worker nodes should auto-join the cluster after apply-config
-# Control plane nodes may need etcd bootstrap
+# Worker ノードは apply-config 後に自動で K8s に参加する
+# CP ノードは etcd bootstrap が必要な場合がある
 
-# Verify nodes
+# ノード確認
 kubectl get nodes
-# → 6 nodes should be Ready
+# → 6 ノードが Ready
 
-# Verify etcd
+# etcd 確認
 talosctl --nodes 10.2.0.66 etcd members
-# → 3 members
+# → 3 メンバー
 ```
 
-### Phase 4: Vault HA Restoration
+### Phase 4: Vault HA 復帰
 
 ```bash
-# 1. Update k8s/vault/values.yaml:
+# 1. k8s/vault/values.yaml を更新:
 #    - replicas: 1 → replicas: 3
-#    - Uncomment retry_join blocks for vault-1 and vault-2
-#    - Uncomment affinity block
-#    - Remove standalone comments
+#    - vault-1, vault-2 の retry_join ブロックをアンコメント
+#    - affinity ブロックをアンコメント
+#    - standalone コメントを削除
 
 # 2. Git push → ArgoCD sync
 
-# 3. Verify Raft cluster
+# 3. Raft クラスタ確認
 kubectl -n vault exec vault-0 -- vault operator raft list-peers
 # → 3 voters
 ```
 
-### Phase 5: k8s-gateway Replicas Restoration
+### Phase 5: k8s-gateway replicas 復帰
 
 ```bash
-# 1. Update k8s/k8s-gateway/values.yaml:
+# 1. k8s/k8s-gateway/values.yaml を更新:
 #    - replicaCount: 2 → replicaCount: 3
-#    - Remove reduced comments
+#    - 縮退コメントを削除
 
 # 2. Git push → ArgoCD sync
 
-# 3. Verify
+# 3. 確認
 kubectl -n k8s-gateway get pods -o wide
-# → 3 replicas on different nodes
+# → 3 replicas が異なるノードで稼働
 ```
 
-### Phase 6: node-reboot Re-creation (Optional)
+### Phase 6: node-reboot 再作成 (任意)
 
-If periodic reboot is needed again, re-create:
+定期リブートが再度必要な場合は以下を再作成する:
 - `k8s/argocd/apps/node-reboot.yaml`
 - `k8s/node-reboot/manifests/` (CronJobs + ExternalSecret)
 
-Refer to git history for the original configuration.
+元の設定は git 履歴から参照可能。
 
-## Verification Checklist
+## 検証チェックリスト
 
-### After Node Reduction (6 → 3)
+### ノード削減後 (6 → 3)
 
-- [ ] `kubectl get nodes` → 3 nodes Ready (k8s-cp-01, k8s-worker-02, k8s-worker-03)
-- [ ] `kubectl -n argocd get applications` → All Synced/Healthy, no node-reboot
-- [ ] `kubectl -n vault get pods` → vault-0 only, Running
+- [ ] `kubectl get nodes` → 3 ノード Ready (k8s-cp-01, k8s-worker-02, k8s-worker-03)
+- [ ] `kubectl -n argocd get applications` → 全て Synced/Healthy、node-reboot なし
+- [ ] `kubectl -n vault get pods` → vault-0 のみ Running
 - [ ] `kubectl -n vault exec vault-0 -- vault status` → Sealed=false
 - [ ] `kubectl -n k8s-gateway get pods` → 2 replicas Running
-- [ ] `kubectl get pods --all-namespaces` → All pods Running
-- [ ] `nslookup argocd.internal.onoe.dev` → Resolves correctly
+- [ ] `kubectl get pods --all-namespaces` → 全 Pod Running
+- [ ] `nslookup argocd.internal.onoe.dev` → 正常解決
 - [ ] `kubectl -n openclaw get pods` → 1/1 Ready
 
-### After HA Restoration (3 → 6)
+### HA 復帰後 (3 → 6)
 
-- [ ] `kubectl get nodes` → 6 nodes Ready
-- [ ] `talosctl --nodes 10.2.0.66 etcd members` → 3 members
+- [ ] `kubectl get nodes` → 6 ノード Ready
+- [ ] `talosctl --nodes 10.2.0.66 etcd members` → 3 メンバー
 - [ ] `kubectl -n vault exec vault-0 -- vault operator raft list-peers` → 3 voters
 - [ ] `kubectl -n k8s-gateway get pods` → 3 replicas Running
-- [ ] `kubectl get pods --all-namespaces` → All pods Running
+- [ ] `kubectl get pods --all-namespaces` → 全 Pod Running
