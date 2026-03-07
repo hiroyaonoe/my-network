@@ -214,8 +214,8 @@ data:
             includeReasoning: false,
             ackMaxChars: 300,
             activeHours: {
-              start: "09:00",
-              end: "00:00",
+              start: "00:00",
+              end: "23:59",
               timezone: "Asia/Tokyo",
             },
           },
