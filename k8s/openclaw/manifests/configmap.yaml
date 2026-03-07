@@ -37,13 +37,12 @@ data:
           groupPolicy: "open",
           allowFrom: ["*"],
           replyToMode: "off",
-          streaming: "full",
-          nativeStreaming: true,
-
-          channelMentionPolicy: {
-            default: "mention-required",
-            channels: {
-              "with-openclaw": "always-listen"
+          streaming: true,
+          channels: {
+            // with-openclaw
+            "C0AJPD456QL": {
+              allow: true,
+              requireMention: false,
             },
           },
         },
