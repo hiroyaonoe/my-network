@@ -1,6 +1,8 @@
 domain: internal.onoe.dev
 
-replicaCount: 3
+# Reduced from 3 to 2 (3 nodes → 2 workers)
+# To restore HA: set replicaCount: 3
+replicaCount: 2
 
 service:
   type: LoadBalancer
