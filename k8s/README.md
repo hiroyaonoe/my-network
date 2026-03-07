@@ -974,6 +974,104 @@ kubectl get clustersecretstore vault  # Ready=True
 kubectl -n monitoring get externalsecret  # SecretSynced=True
 ```
 
+## Claude Code (コンテナ化開発環境)
+
+claude-01 VM を K8s StatefulSet にコンテナ化。永続ストレージ付きの Ubuntu コンテナに SSH でアクセスする。
+
+ref: https://github.com/hiroyaonoe/my-network/issues/15
+
+### アーキテクチャ
+
+```
+[StatefulSet] (claude namespace, 1 replica)
+  ├── image: ubuntu:24.04
+  ├── initContainer: rootfs を PVC に rsync (初回のみ)
+  ├── PVC: 32Gi (ceph-block) → / (ルートファイルシステム全体を永続化)
+  ├── command: /usr/sbin/sshd -D
+  └── port: 22 (SSH)
+
+[Service] claude (headless)
+  └── ClusterIP: None (StatefulSet 必須)
+
+[Service] claude-ssh (LoadBalancer)
+  └── 22 → 22, claude.internal.onoe.dev (10.5.0.4)
+
+[NetworkPolicy] (4段階)
+  ├── default-deny-all (ingress + egress 全拒否)
+  ├── allow-dns → kube-system/kube-dns (UDP/TCP 53)
+  ├── allow-external-egress → 0.0.0.0/0 (except private IPs) on TCP 22/80/443
+  └── allow-ssh-ingress → TCP 22
+```
+
+### リソース要件
+
+| | requests | limits |
+|---|---|---|
+| CPU | 200m | 2 |
+| Memory | 512Mi | 4Gi |
+
+### 永続化の仕組み
+
+- initContainer が Ubuntu rootfs を PVC にコピー (初回のみ、`/rootfs/etc/os-release` の有無で判定)
+- メインコンテナは PVC を `/` にマウントして sshd 起動
+- apt-get でインストールしたパッケージ、設定変更、ユーザーデータは Pod 再起動後も保持
+- StatefulSet 削除後も PVC は残る (手動削除が必要)
+
+### デプロイ (ArgoCD 自動)
+
+`k8s/argocd/apps/claude.yaml` が main にマージされると、ArgoCD が自動的に claude namespace にデプロイする。
+
+### セットアップ (デプロイ後)
+
+```bash
+# 1. Pod 起動確認
+kubectl -n claude get pods
+# → claude-0  1/1  Running
+
+# 2. LB VIP 確認
+kubectl -n claude get svc claude-ssh
+# → EXTERNAL-IP: 10.5.0.4
+
+# 3. SSH アクセス (初回は kubectl exec でパスワード設定または SSH 鍵配置が必要)
+kubectl exec -it -n claude claude-0 -- passwd root
+# または
+kubectl exec -it -n claude claude-0 -- mkdir -p /root/.ssh
+kubectl exec -it -n claude claude-0 -- bash -c 'echo "ssh-ed25519 ..." > /root/.ssh/authorized_keys'
+
+# 4. SSH 接続確認
+ssh root@10.5.0.4
+```
+
+### 検証
+
+```bash
+# 1. Pod Running
+kubectl -n claude get pods
+# → claude-0  1/1  Running
+
+# 2. Service VIP
+kubectl -n claude get svc claude-ssh
+# → EXTERNAL-IP: 10.5.0.4
+
+# 3. DNS 解決
+nslookup claude.internal.onoe.dev
+# → 10.5.0.4
+
+# 4. PVC
+kubectl -n claude get pvc
+# → rootfs-claude-0  32Gi  Bound
+
+# 5. SSH 接続
+ssh root@10.5.0.4
+
+# 6. 外部疎通 (Pod 内)
+kubectl exec -n claude claude-0 -- curl -s https://api.github.com | head -1
+
+# 7. 内部ネットワーク遮断
+kubectl exec -n claude claude-0 -- curl -s --connect-timeout 5 http://10.2.0.1
+# → タイムアウト (NetworkPolicy で遮断)
+```
+
 ## OpenClaw (AI Coding Agent Gateway)
 
 チャットアプリ (Slack 等) と AI コーディングエージェントを接続するセルフホスト型ゲートウェイ。VM (opencraw-01) から K8s コンテナに移行。
