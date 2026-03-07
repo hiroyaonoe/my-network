@@ -608,7 +608,7 @@ Ceph OSD (k8s-rbd pool, 3x replication)
 | Proxmoxノード | 既存VM | K8s VM | 合計 RAM | オーバーコミット比 |
 |--------------|--------|--------|---------|-----------------|
 | mandolin1 | bastion-01 (8GB) | cp-01 (8GB) + worker-01 (8GB) | 24GB | ~2.2x |
-| mandolin2 | claude-01 (8GB) | cp-02 (8GB) + worker-02 (8GB) | 24GB | ~2.2x |
+| mandolin2 | なし | cp-02 (8GB) + worker-02 (8GB) | 16GB | ~1.5x |
 | mandolin3 | なし | cp-03 (8GB) + worker-03 (8GB) | 16GB | ~1.5x |
 
 > Proxmox の memory ballooning で実使用量に応じた動的調整を行う。
@@ -709,7 +709,6 @@ k8s_gateway (10.5.0.53:53, LoadBalancer, 3 replicas)
 | mandolin2.internal.onoe.dev | 10.1.1.12 | Proxmox ノード |
 | mandolin3.internal.onoe.dev | 10.1.1.13 | Proxmox ノード |
 | bastion-01.internal.onoe.dev | 10.2.0.2 | 踏み台 VM |
-| claude-01.internal.onoe.dev | 10.2.0.98 | Claude Code 開発環境 VM |
 | k8s-api.internal.onoe.dev | 10.2.0.94 | K8s API Server VIP |
 
 ### 10.4 フォールバック設計
