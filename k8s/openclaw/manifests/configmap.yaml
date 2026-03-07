@@ -37,6 +37,15 @@ data:
           groupPolicy: "open",
           allowFrom: ["*"],
           replyToMode: "off",
+          streaming: "full",
+          nativeStreaming: true,
+
+          channelMentionPolicy: {
+            default: "mention-required",
+            channels: {
+              with-openclaw: "always-listen"
+            },
+          },
         },
       },
 
