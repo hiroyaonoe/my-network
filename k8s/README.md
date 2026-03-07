@@ -637,6 +637,14 @@ k8s/
 │       ├── externalsecret-rook-ceph-config.yaml       # ExternalSecret
 │       ├── externalsecret-rook-csi-rbd-provisioner.yaml # ExternalSecret
 │       └── externalsecret-rook-csi-rbd-node.yaml      # ExternalSecret
+├── claude/
+│   └── manifests/
+│       ├── statefulset.yaml                          # StatefulSet + headless Service
+│       ├── service.yaml                              # LoadBalancer Service (SSH)
+│       ├── networkpolicy-default-deny.yaml           # Default deny all
+│       ├── networkpolicy-allow-dns.yaml              # Allow DNS to CoreDNS
+│       ├── networkpolicy-allow-external-egress.yaml  # Allow HTTP/HTTPS/SSH to external
+│       └── networkpolicy-allow-ssh-ingress.yaml      # Allow SSH ingress
 ├── openclaw/
 │   └── manifests/
 │       ├── statefulset.yaml              # StatefulSet + headless Service
@@ -698,6 +706,7 @@ k8s/
         ├── vault-config.yaml              # Vault TLS Certificate Application
         ├── external-secrets.yaml          # ESO Application
         ├── external-secrets-config.yaml   # ClusterSecretStore Application
+        ├── claude.yaml                  # Claude Code Container Application
         └── openclaw.yaml                # OpenClaw AI Gateway Application
 ```
 

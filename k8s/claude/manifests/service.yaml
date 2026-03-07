@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: claude-ssh
+  namespace: claude
+  labels:
+    app.kubernetes.io/name: claude
+  annotations:
+    io.cilium/lb-ipam-ips: "10.5.0.4"
+    external-dns.alpha.kubernetes.io/hostname: claude.internal.onoe.dev
+spec:
+  type: LoadBalancer
+  ports:
+    - port: 22
+      targetPort: 22
+      name: ssh
+  selector:
+    app.kubernetes.io/name: claude
