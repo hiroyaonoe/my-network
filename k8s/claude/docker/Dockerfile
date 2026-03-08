@@ -59,7 +59,8 @@ RUN curl -LsSf https://astral.sh/uv/install.sh | sh \
     && mv /root/.local/bin/uvx /usr/local/bin/ \
     && rm -rf /root/.local \
     && uv python install --default \
-    && ln -sf "$(uv python find)" /usr/local/bin/python3
+    && ln -sf "$(uv python find)" /usr/local/bin/python3 \
+    && ln -sf "$(uv python find)" /usr/local/bin/python
 
 # Claude Code
 USER onoe
