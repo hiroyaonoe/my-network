@@ -671,9 +671,10 @@ k8s/
 │       ├── externalsecret-rook-ceph-config.yaml       # ExternalSecret
 │       ├── externalsecret-rook-csi-rbd-provisioner.yaml # ExternalSecret
 │       └── externalsecret-rook-csi-rbd-node.yaml      # ExternalSecret
+├── images/
+│   └── ubuntu/
+│       └── Dockerfile                          # カスタムイメージ (GHCR にビルド)
 ├── claude/
-│   ├── docker/
-│   │   └── Dockerfile                          # カスタムイメージ (GHCR にビルド)
 │   └── manifests/
 │       ├── statefulset.yaml                          # StatefulSet + headless Service
 │       ├── service.yaml                              # LoadBalancer Service (SSH)
@@ -1020,11 +1021,11 @@ ref: https://github.com/hiroyaonoe/my-network/issues/15
 ### アーキテクチャ
 
 ```
-[GHCR] ghcr.io/hiroyaonoe/claude-code:latest
-  └── GitHub Actions: k8s/claude/docker/Dockerfile 変更時にビルド・プッシュ
+[GHCR] ghcr.io/hiroyaonoe/ubuntu-dev:latest
+  └── GitHub Actions: k8s/images/ubuntu/Dockerfile 変更時にビルド・プッシュ
 
 [StatefulSet] (claude namespace, 1 replica)
-  ├── image: ghcr.io/hiroyaonoe/claude-code:latest
+  ├── image: ghcr.io/hiroyaonoe/ubuntu-dev:latest
   ├── PVC: 32Gi (ceph-block) → /home/onoe (ユーザーデータ永続化)
   ├── command: chown onoe:onoe /home/onoe && exec sshd -D -e
   └── port: 22 (SSH)
@@ -1051,9 +1052,9 @@ ref: https://github.com/hiroyaonoe/my-network/issues/15
 
 ### イメージビルド
 
-- Dockerfile: `k8s/claude/docker/Dockerfile` (openssh-server 入り Ubuntu 24.04)
-- GitHub Actions: `k8s/claude/docker/**` への push (main) または workflow_dispatch でビルド・プッシュ
-- イメージ: `ghcr.io/hiroyaonoe/claude-code` (タグ: `latest` + `sha-xxxxxxx`)
+- Dockerfile: `k8s/images/ubuntu/Dockerfile` (openssh-server 入り Ubuntu 24.04)
+- GitHub Actions: `k8s/images/ubuntu/**` への push (main) または workflow_dispatch でビルド・プッシュ
+- イメージ: `ghcr.io/hiroyaonoe/ubuntu-dev` (タグ: `latest` + `sha-xxxxxxx`)
 - 追加パッケージが必要な場合は Dockerfile に追加してリビルド
 
 ### 永続化の仕組み
