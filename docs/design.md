@@ -725,7 +725,7 @@ k8s_gateway (10.5.0.53:53, LoadBalancer, 3 replicas)
 ### 10.5 CoreDNS Stub Zone (クラスタ内 DNS 転送)
 
 クラスタ内の Pod (ESO, cert-manager 等) はデフォルトで kube-dns (CoreDNS, 10.4.0.10) を使用する。
-kube-dns は `cluster.local` のみ解決可能で、`internal.onoe.dev` は解決できない。
+kube-dns は `cluster.local` を解決し、その他のドメインは `/etc/resolv.conf` で指定された上流 DNS にフォワードするが、その上流では `internal.onoe.dev` が解決できない。
 
 この問題を解決するため、CoreDNS の Corefile に `internal.onoe.dev` の stub zone を追加し、k8s-gateway (10.5.0.53) に転送する。
 
