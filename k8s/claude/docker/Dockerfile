@@ -25,7 +25,7 @@ ENV PATH="/home/linuxbrew/.linuxbrew/bin:/home/linuxbrew/.linuxbrew/sbin:${PATH}
 
 # Layer 4: brew packages (update ARG to rebuild)
 ARG BREW_PACKAGES="nodenv gh"
-RUN su -l linuxbrew -c "brew install ${BREW_PACKAGES}"
+RUN su -l linuxbrew -c "/home/linuxbrew/.linuxbrew/bin/brew install ${BREW_PACKAGES}"
 
 # Layer 5: Go (update ARG to rebuild)
 ARG GO_VERSION=latest
