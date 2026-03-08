@@ -39,13 +39,13 @@ spec:
       containers:
         - name: claude
           image: ghcr.io/hiroyaonoe/claude-code:latest
-          command: ["/usr/sbin/sshd", "-D", "-e"]
+          command: ["/bin/bash", "-c", "chown onoe:onoe /home/onoe && exec /usr/sbin/sshd -D -e"]
           ports:
             - name: ssh
               containerPort: 22
           volumeMounts:
             - name: data
-              mountPath: /root
+              mountPath: /home/onoe
           resources:
             requests:
               cpu: 200m

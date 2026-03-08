@@ -10,6 +10,8 @@ RUN apt-get update \
     && sed -i 's/^#*PermitRootLogin.*/PermitRootLogin yes/' /etc/ssh/sshd_config \
     && sed -i 's|^#*AuthorizedKeysFile.*|AuthorizedKeysFile .ssh/authorized_keys /etc/ssh/github_authorized_keys|' /etc/ssh/sshd_config \
     && curl -fsSL https://github.com/hiroyaonoe.keys > /etc/ssh/github_authorized_keys \
+    && useradd -m -s /usr/bin/zsh -G sudo onoe \
+    && echo 'onoe ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Homebrew
