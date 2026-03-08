@@ -991,7 +991,7 @@ ref: https://github.com/hiroyaonoe/my-network/issues/15
 [StatefulSet] (claude namespace, 1 replica)
   ├── image: ghcr.io/hiroyaonoe/claude-code:latest
   ├── PVC: 32Gi (ceph-block) → /home/onoe (ユーザーデータ永続化)
-  ├── command: /usr/sbin/sshd -D -e
+  ├── command: chown onoe:onoe /home/onoe && exec sshd -D -e
   └── port: 22 (SSH)
 
 [Service] claude (headless)
