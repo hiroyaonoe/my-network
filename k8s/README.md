@@ -332,7 +332,7 @@ kubectl apply -f k8s/argocd/bootstrap/root.yaml
 
 ## TLS (cert-manager + Let's Encrypt)
 
-cert-manager + Let's Encrypt で `*.internal.onoe.dev` のワイルドカード証明書を発行する。
+cert-manager + Let's Encrypt で各サービスに TLS 証明書を発行する。
 `.dev` TLD は HSTS preload リストにより HTTPS が必須のため、この設定が必要。
 DNS-01 チャレンジに Cloudflare API を使用する。
 
@@ -341,7 +341,6 @@ DNS-01 チャレンジに Cloudflare API を使用する。
 ```
 cert-manager (cert-manager namespace)
   ├── ClusterIssuer (letsencrypt)  ← Let's Encrypt ACME + Cloudflare DNS-01
-  ├── Wildcard Certificate          ← *.internal.onoe.dev
   └── ExternalSecret               ← Vault → Cloudflare API Token
 
 各 namespace
@@ -361,14 +360,25 @@ Cloudflare ダッシュボード → My Profile → API Tokens → Create Token:
 | Permissions | Zone:DNS:Edit, Zone:Zone:Read |
 | Zone Resources | Include / Specific zone / onoe.dev |
 
-#### 2. Vault に API Token を格納
+#### 2. Cloudflare API Token を K8s に格納
+
+> **Note**: Cloudflare API Token は Vault + ExternalSecret で管理するが、初回デプロイ時は Vault 自身の TLS 証明書がまだ発行されておらず ESO が Vault に接続できない循環依存がある。そのため初回は手動で Secret を作成し、LE 証明書が発行された後に ExternalSecret による自動同期に移行する。
 
 ```bash
+# 初回ブートストラップ (手動)
+kubectl create secret generic cloudflare-api-token \
+  -n cert-manager \
+  --from-literal=api-token='<cloudflare-api-token>'
+
+# Vault が LE 証明書で起動した後、Vault にも格納
 kubectl -n vault exec -it vault-0 -- sh
 vault login
 vault kv put secret/cert-manager/cloudflare-api-token \
   api-token='<cloudflare-api-token>'
 exit
+
+# 手動作成した Secret を削除 (ESO が ExternalSecret から再生成する)
+kubectl -n cert-manager delete secret cloudflare-api-token
 ```
 
 ### デプロイ (ArgoCD 自動)
@@ -377,7 +387,7 @@ exit
 1. cert-manager (CRDs + controller) をデプロイ
 2. ExternalSecret → Cloudflare API Token を同期
 3. ClusterIssuer (letsencrypt) を作成
-4. ワイルドカード Certificate + 各サービスの Certificate を発行
+4. 各サービスの Certificate を発行
 
 ### 検証
 
@@ -385,10 +395,6 @@ exit
 # ClusterIssuer 確認
 kubectl get clusterissuer
 # → letsencrypt Ready
-
-# ワイルドカード Certificate 確認
-kubectl -n cert-manager get certificate wildcard-internal-onoe-dev
-# → Ready: True
 
 # 各サービスの Certificate 確認
 kubectl get certificate -A
@@ -636,7 +642,6 @@ k8s/
 │   ├── values.yaml                         # cert-manager Helm values
 │   └── manifests/
 │       ├── letsencrypt-issuer.yaml        # Let's Encrypt ClusterIssuer (Cloudflare DNS-01)
-│       ├── wildcard-certificate.yaml      # *.internal.onoe.dev Wildcard Certificate
 │       └── externalsecret-cloudflare-api-token.yaml  # Cloudflare API Token (Vault → Secret)
 ├── rook-ceph/
 │   ├── operator-values.yaml               # Rook Operator Helm values

@@ -727,21 +727,20 @@ k8s_gateway (10.5.0.53:53, LoadBalancer, 3 replicas)
 ### 11.1 概要
 
 `.dev` TLD は HSTS preload リストに登録されており、ブラウザは `http://*.dev` を自動的に `https://` にリダイレクトする。
-cert-manager + Let's Encrypt で `*.internal.onoe.dev` のワイルドカード証明書を発行し、各サービスに TLS を提供する。
+cert-manager + Let's Encrypt で各サービスに TLS 証明書を発行する。
 DNS-01 チャレンジに Cloudflare API を使用する。
 
 | 項目 | 値 |
 |------|-----|
 | cert-manager | cert-manager namespace |
 | ClusterIssuer | letsencrypt (ACME DNS-01, Cloudflare) |
-| ワイルドカード証明書 | *.internal.onoe.dev (90日、30日前に自動更新) |
+| 証明書 | 各サービスごとに発行 (90日、30日前に自動更新) |
 
 ### 11.2 アーキテクチャ
 
 ```
 cert-manager (cert-manager namespace)
   ├── ClusterIssuer (letsencrypt)  ← Let's Encrypt ACME + Cloudflare DNS-01
-  ├── Wildcard Certificate          ← *.internal.onoe.dev
   └── ExternalSecret               ← Vault → Cloudflare API Token
 
 各 namespace
