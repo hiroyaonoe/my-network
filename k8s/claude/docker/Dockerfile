@@ -7,9 +7,8 @@ RUN apt-get update \
         build-essential procps file \
         zsh neovim \
     && mkdir -p /run/sshd \
-    && sed -i 's/^#*PermitRootLogin.*/PermitRootLogin yes/' /etc/ssh/sshd_config \
+    && sed -i 's/^#*PermitRootLogin.*/PermitRootLogin no/' /etc/ssh/sshd_config \
     && sed -i 's|^#*AuthorizedKeysFile.*|AuthorizedKeysFile .ssh/authorized_keys /etc/ssh/github_authorized_keys|' /etc/ssh/sshd_config \
-    && curl -fsSL https://github.com/hiroyaonoe.keys > /etc/ssh/github_authorized_keys \
     && useradd -m -s /usr/bin/zsh -G sudo onoe \
     && echo 'onoe ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
@@ -53,6 +52,9 @@ RUN curl -LsSf https://astral.sh/uv/install.sh | sh \
 
 # Claude Code
 RUN curl -fsSL https://claude.ai/install.sh | bash
+
+# GitHub SSH keys (separate layer for cache efficiency)
+RUN curl -fsSL https://github.com/hiroyaonoe.keys > /etc/ssh/github_authorized_keys
 
 # Default shell
 RUN chsh -s "$(which zsh)"
