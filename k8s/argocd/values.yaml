@@ -8,7 +8,7 @@ server:
     enabled: true
     domain: argocd.internal.onoe.dev
     issuer:
-      name: internal-ca
+      name: letsencrypt
       kind: ClusterIssuer
       group: cert-manager.io
 

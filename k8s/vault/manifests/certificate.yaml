@@ -5,17 +5,11 @@ metadata:
   namespace: vault
 spec:
   secretName: vault-server-tls
-  duration: 8760h # 1 year
+  duration: 2160h # 90 days
   renewBefore: 720h # 30 days
   dnsNames:
     - vault.internal.onoe.dev
-    - vault.vault.svc.cluster.local
-    - vault.vault.svc
-    - vault
-  ipAddresses:
-    - "10.5.0.3"
-    - "127.0.0.1"
   issuerRef:
-    name: internal-ca
+    name: letsencrypt
     kind: ClusterIssuer
     group: cert-manager.io
