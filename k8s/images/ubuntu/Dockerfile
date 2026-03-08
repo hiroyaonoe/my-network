@@ -4,7 +4,7 @@ FROM ubuntu:24.04
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         openssh-server curl ca-certificates git sudo \
-        build-essential procps file \
+        build-essential procps file jq \
         zsh neovim tmux \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
