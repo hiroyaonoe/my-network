@@ -499,6 +499,22 @@ kubectl get pvc test-rbd-pvc  # → Bound
 kubectl delete pvc test-rbd-pvc
 ```
 
+## CoreDNS Stub Zone (クラスタ内 DNS 転送)
+
+クラスタ内の Pod (ESO 等) が `*.internal.onoe.dev` を解決できるよう、CoreDNS に stub zone を追加している。
+
+```
+Cluster Pod (e.g. ESO)
+  ↓ DNS query: vault.internal.onoe.dev
+kube-dns (CoreDNS, 10.4.0.10)
+  ↓ stub zone: internal.onoe.dev → forward to 10.5.0.53
+k8s-gateway (10.5.0.53)
+  ↓ resolve
+→ 10.5.0.3 (Vault LB VIP)
+```
+
+> **Note**: Talos がデフォルトでデプロイする CoreDNS ConfigMap を ArgoCD で上書き管理している。Talos アップグレード時に ConfigMap がリセットされた場合、ArgoCD の selfHeal により自動復旧する。
+
 ## HA DNS サーバー (k8s_gateway)
 
 CoreDNS + k8s_gateway プラグインによる HA DNS サーバー。静的レコード・K8s Service 自動登録・上流 DNS 転送を提供する。
@@ -638,6 +654,9 @@ k8s/
 │   └── manifests/
 │       ├── lb-ip-pool.yaml                # CiliumLoadBalancerIPPool
 │       └── l2-announcement-policy.yaml    # CiliumL2AnnouncementPolicy
+├── coredns/
+│   └── manifests/
+│       └── configmap-coredns.yaml         # CoreDNS Corefile (stub zone for internal.onoe.dev)
 ├── cert-manager/
 │   ├── values.yaml                         # cert-manager Helm values
 │   └── manifests/
@@ -708,6 +727,7 @@ k8s/
         ├── cilium.yaml                    # Cilium Application
         ├── cilium-config.yaml             # Cilium CRD Application
         ├── argocd.yaml                    # ArgoCD self-management
+        ├── coredns-config.yaml            # CoreDNS config Application
         ├── cert-manager.yaml              # cert-manager Application
         ├── cert-manager-config.yaml       # cert-manager config Application
         ├── rook-ceph.yaml                 # Rook Operator Application

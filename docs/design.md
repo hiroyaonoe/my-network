@@ -722,6 +722,22 @@ k8s_gateway (10.5.0.53:53, LoadBalancer, 3 replicas)
 > K8s ノードが自身の DNS を使うと、DNS Pod が起動する前にクエリが失敗する循環依存が発生するため、K8s ノードは上流 DNS (10.0.0.1) を使い続ける。
 > VM の DNS 変更は各 VM の OS 側 (resolv.conf 等) で個別に設定する。Catalyst DHCP は変更しない。
 
+### 10.5 CoreDNS Stub Zone (クラスタ内 DNS 転送)
+
+クラスタ内の Pod (ESO, cert-manager 等) はデフォルトで kube-dns (CoreDNS, 10.4.0.10) を使用する。
+kube-dns は `cluster.local` を解決し、その他のドメインは `/etc/resolv.conf` で指定された上流 DNS にフォワードするが、その上流では `internal.onoe.dev` が解決できない。
+
+この問題を解決するため、CoreDNS の Corefile に `internal.onoe.dev` の stub zone を追加し、k8s-gateway (10.5.0.53) に転送する。
+
+```
+kube-dns (CoreDNS, 10.4.0.10)
+  ├── .:53          → cluster.local, forward to /etc/resolv.conf
+  └── internal.onoe.dev:53  → forward to 10.5.0.53 (k8s-gateway)
+```
+
+> Talos がデプロイする CoreDNS ConfigMap を ArgoCD (coredns-config) で上書き管理する。
+> Talos アップグレード時に ConfigMap がリセットされても、ArgoCD の selfHeal により自動復旧する。
+
 ## 11. TLS (cert-manager + Let's Encrypt)
 
 ### 11.1 概要
