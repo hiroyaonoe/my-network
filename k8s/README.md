@@ -977,7 +977,7 @@ kubectl -n vault exec vault-0 -- vault status               # Sealed=false
 
 # DNS/TLS
 dig @10.5.0.53 vault.internal.onoe.dev  # → 10.5.0.3
-curl https://vault.internal.onoe.dev:8200/v1/sys/health
+curl https://vault.internal.onoe.dev/v1/sys/health
 
 # ESO
 kubectl get clustersecretstore vault  # Ready=True

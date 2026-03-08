@@ -16,7 +16,6 @@ server:
           cluster_address = "[::]:8201"
           tls_cert_file  = "/vault/tls/tls.crt"
           tls_key_file   = "/vault/tls/tls.key"
-          tls_client_ca_file = "/vault/tls/tls.crt"
         }
 
         storage "raft" {
@@ -100,8 +99,8 @@ server:
       ) &
 
   extraEnvironmentVars:
-    VAULT_CACERT: /vault/tls/tls.crt
     VAULT_ADDR: https://127.0.0.1:8200
+    VAULT_TLS_SERVER_NAME: vault.internal.onoe.dev
     VAULT_API_ADDR: https://$(HOSTNAME).vault-internal:8200
     VAULT_CLUSTER_ADDR: https://$(HOSTNAME).vault-internal:8201
 
