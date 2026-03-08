@@ -35,6 +35,7 @@ data:
 
     internal.onoe.dev:53 {
         errors
+        log
         cache 30
         forward . 10.5.0.53
     }
