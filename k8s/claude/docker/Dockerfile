@@ -45,6 +45,7 @@ RUN go install github.com/junegunn/fzf@latest \
 # Node.js via nodenv (update ARG to rebuild)
 ARG NODE_MAJOR=22
 ENV NODENV_ROOT=/opt/nodenv PATH="/opt/nodenv/shims:${PATH}"
+RUN mkdir -p /opt/nodenv && chown onoe:onoe /opt/nodenv
 USER onoe
 RUN NODE_VERSION="$(nodenv install --list | grep -E '^\s*[0-9]+\.[0-9]+\.[0-9]+$' | grep -E "^\s*${NODE_MAJOR}\." | tail -1 | tr -d ' ')" \
     && nodenv install "$NODE_VERSION" \
