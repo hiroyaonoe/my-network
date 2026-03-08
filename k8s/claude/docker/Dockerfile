@@ -1,7 +1,8 @@
 FROM ubuntu:24.04
 
 # Layer 1: System packages (rarely changes)
-RUN apt-get update \
+RUN yes | unminimize \
+    && apt-get update \
     && apt-get install -y --no-install-recommends \
         openssh-server curl ca-certificates git sudo \
         build-essential procps file \
