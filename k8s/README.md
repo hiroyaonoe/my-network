@@ -990,8 +990,8 @@ ref: https://github.com/hiroyaonoe/my-network/issues/15
 
 [StatefulSet] (claude namespace, 1 replica)
   ├── image: ghcr.io/hiroyaonoe/claude-code:latest
-  ├── PVC: 32Gi (ceph-block) → /root (ユーザーデータ永続化)
-  ├── command: /usr/sbin/sshd -D -e
+  ├── PVC: 32Gi (ceph-block) → /home/onoe (ユーザーデータ永続化)
+  ├── command: chown onoe:onoe /home/onoe && exec sshd -D -e
   └── port: 22 (SSH)
 
 [Service] claude (headless)
@@ -1023,7 +1023,7 @@ ref: https://github.com/hiroyaonoe/my-network/issues/15
 
 ### 永続化の仕組み
 
-- PVC を `/root` にマウントし、ユーザーデータ (SSH 鍵、設定ファイル等) を永続化
+- PVC を `/home/onoe` にマウントし、ユーザーデータ (SSH 鍵、設定ファイル等) を永続化
 - パッケージはカスタムイメージに含める (PVC には含まれない)
 - StatefulSet 削除後も PVC は残る (手動削除が必要)
 
@@ -1042,14 +1042,8 @@ kubectl -n claude get pods
 kubectl -n claude get svc claude-ssh
 # → EXTERNAL-IP: 10.5.0.4
 
-# 3. SSH アクセス (初回は kubectl exec でパスワード設定または SSH 鍵配置が必要)
-kubectl exec -it -n claude claude-0 -- passwd root
-# または
-kubectl exec -it -n claude claude-0 -- mkdir -p /root/.ssh
-kubectl exec -it -n claude claude-0 -- bash -c 'echo "ssh-ed25519 ..." > /root/.ssh/authorized_keys'
-
-# 4. SSH 接続確認
-ssh root@10.5.0.4
+# 3. SSH 接続確認 (GitHub SSH 鍵がイメージに含まれているため即接続可能)
+ssh onoe@10.5.0.4
 ```
 
 ### 検証
@@ -1072,7 +1066,7 @@ kubectl -n claude get pvc
 # → data-claude-0  32Gi  Bound
 
 # 5. SSH 接続
-ssh root@10.5.0.4
+ssh onoe@10.5.0.4
 
 # 6. 外部疎通 (Pod 内)
 kubectl exec -n claude claude-0 -- curl -s https://api.github.com | head -1
