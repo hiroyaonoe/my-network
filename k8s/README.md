@@ -638,6 +638,8 @@ k8s/
 │       ├── externalsecret-rook-csi-rbd-provisioner.yaml # ExternalSecret
 │       └── externalsecret-rook-csi-rbd-node.yaml      # ExternalSecret
 ├── claude/
+│   ├── docker/
+│   │   └── Dockerfile                          # カスタムイメージ (GHCR にビルド)
 │   └── manifests/
 │       ├── statefulset.yaml                          # StatefulSet + headless Service
 │       ├── service.yaml                              # LoadBalancer Service (SSH)
@@ -976,18 +978,20 @@ kubectl -n monitoring get externalsecret  # SecretSynced=True
 
 ## Claude Code (コンテナ化開発環境)
 
-claude-01 VM を K8s StatefulSet にコンテナ化。永続ストレージ付きの Ubuntu コンテナに SSH でアクセスする。
+claude-01 VM を K8s StatefulSet にコンテナ化。カスタムイメージ + 永続ストレージ付きの Ubuntu コンテナに SSH でアクセスする。
 
 ref: https://github.com/hiroyaonoe/my-network/issues/15
 
 ### アーキテクチャ
 
 ```
+[GHCR] ghcr.io/hiroyaonoe/claude-code:latest
+  └── GitHub Actions: k8s/claude/docker/Dockerfile 変更時にビルド・プッシュ
+
 [StatefulSet] (claude namespace, 1 replica)
-  ├── image: ubuntu:24.04
-  ├── initContainer: rootfs を PVC に rsync (初回のみ)
-  ├── PVC: 32Gi (ceph-block) → / (ルートファイルシステム全体を永続化)
-  ├── command: /usr/sbin/sshd -D
+  ├── image: ghcr.io/hiroyaonoe/claude-code:latest
+  ├── PVC: 32Gi (ceph-block) → /root (ユーザーデータ永続化)
+  ├── command: /usr/sbin/sshd -D -e
   └── port: 22 (SSH)
 
 [Service] claude (headless)
@@ -1010,11 +1014,17 @@ ref: https://github.com/hiroyaonoe/my-network/issues/15
 | CPU | 200m | 2 |
 | Memory | 512Mi | 4Gi |
 
+### イメージビルド
+
+- Dockerfile: `k8s/claude/docker/Dockerfile` (openssh-server 入り Ubuntu 24.04)
+- GitHub Actions: `k8s/claude/docker/**` への push (main) または workflow_dispatch でビルド・プッシュ
+- イメージ: `ghcr.io/hiroyaonoe/claude-code` (タグ: `latest` + `sha-xxxxxxx`)
+- 追加パッケージが必要な場合は Dockerfile に追加してリビルド
+
 ### 永続化の仕組み
 
-- initContainer が Ubuntu rootfs を PVC にコピー (初回のみ、`/rootfs/etc/os-release` の有無で判定)
-- メインコンテナは PVC を `/` にマウントして sshd 起動
-- apt-get でインストールしたパッケージ、設定変更、ユーザーデータは Pod 再起動後も保持
+- PVC を `/root` にマウントし、ユーザーデータ (SSH 鍵、設定ファイル等) を永続化
+- パッケージはカスタムイメージに含める (PVC には含まれない)
 - StatefulSet 削除後も PVC は残る (手動削除が必要)
 
 ### デプロイ (ArgoCD 自動)
@@ -1059,7 +1069,7 @@ nslookup claude.internal.onoe.dev
 
 # 4. PVC
 kubectl -n claude get pvc
-# → rootfs-claude-0  32Gi  Bound
+# → data-claude-0  32Gi  Bound
 
 # 5. SSH 接続
 ssh root@10.5.0.4

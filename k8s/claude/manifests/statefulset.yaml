@@ -36,40 +36,16 @@ spec:
       securityContext:
         seccompProfile:
           type: RuntimeDefault
-      initContainers:
-        - name: init-rootfs
-          image: ubuntu:24.04
-          command: ["/bin/bash", "-c"]
-          args:
-            - |
-              set -e
-              if [ -f /rootfs/etc/os-release ]; then
-                echo "Root filesystem already initialized, skipping."
-                exit 0
-              fi
-              echo "Initializing root filesystem..."
-              apt-get update
-              apt-get install -y openssh-server rsync
-              rsync -a --exclude='/rootfs' --exclude='/proc' --exclude='/sys' --exclude='/dev' --exclude='/run' / /rootfs/
-              mkdir -p /rootfs/proc /rootfs/sys /rootfs/dev /rootfs/run /rootfs/tmp
-              mkdir -p /rootfs/run/sshd
-              sed -i 's/^#*PermitRootLogin.*/PermitRootLogin yes/' /rootfs/etc/ssh/sshd_config
-              echo "Root filesystem initialized."
-          volumeMounts:
-            - name: rootfs
-              mountPath: /rootfs
-          securityContext:
-            runAsUser: 0
       containers:
         - name: claude
-          image: ubuntu:24.04
-          command: ["/usr/sbin/sshd", "-D"]
+          image: ghcr.io/hiroyaonoe/claude-code:latest
+          command: ["/usr/sbin/sshd", "-D", "-e"]
           ports:
             - name: ssh
               containerPort: 22
           volumeMounts:
-            - name: rootfs
-              mountPath: /
+            - name: data
+              mountPath: /root
           resources:
             requests:
               cpu: 200m
@@ -95,7 +71,7 @@ spec:
             runAsUser: 0
   volumeClaimTemplates:
     - metadata:
-        name: rootfs
+        name: data
       spec:
         accessModes:
           - ReadWriteOnce
