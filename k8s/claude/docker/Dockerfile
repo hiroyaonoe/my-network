@@ -5,7 +5,7 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         openssh-server curl ca-certificates git sudo \
         build-essential procps file \
-        zsh neovim \
+        zsh neovim tmux \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # System config + users (rarely changes)
