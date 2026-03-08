@@ -330,62 +330,78 @@ kubectl apply -f k8s/argocd/bootstrap/root.yaml
 > この時点で ArgoCD が Cilium・cilium-config・argocd (自身) を検出し、同期を開始する。
 > 手動 Helm install した状態と Git の定義が一致していれば、差分なく Synced 状態になる。
 
-## TLS (cert-manager + Self-Signed CA)
+## TLS (cert-manager + Let's Encrypt)
 
-cert-manager で内部 CA を構築し、ArgoCD 等のサービスに TLS 証明書を発行する。
+cert-manager + Let's Encrypt で各サービスに TLS 証明書を発行する。
 `.dev` TLD は HSTS preload リストにより HTTPS が必須のため、この設定が必要。
+DNS-01 チャレンジに Cloudflare API を使用する。
 
 ### アーキテクチャ
 
 ```
 cert-manager (cert-manager namespace)
-  ├── SelfSigned ClusterIssuer    ← 自己署名で CA 証明書を発行
-  ├── CA Certificate              ← internal-ca-root (ルート CA 証明書)
-  └── CA ClusterIssuer            ← internal-ca (全 namespace で利用可能)
+  ├── ClusterIssuer (letsencrypt)  ← Let's Encrypt ACME + Cloudflare DNS-01
+  └── ExternalSecret               ← Vault → Cloudflare API Token
 
-ArgoCD (argocd namespace)
-  └── Certificate CR → argocd-server-tls Secret
-        ↑ cert-manager が internal-ca で署名
+各 namespace
+  └── Certificate CR → *-server-tls Secret
+        ↑ cert-manager が Let's Encrypt で署名
+```
+
+### 手動前提条件 (Git push 前)
+
+#### 1. Cloudflare API Token 作成
+
+Cloudflare ダッシュボード → My Profile → API Tokens → Create Token:
+
+| 項目 | 値 |
+|------|-----|
+| Token name | cert-manager-dns01 |
+| Permissions | Zone:DNS:Edit, Zone:Zone:Read |
+| Zone Resources | Include / Specific zone / onoe.dev |
+
+#### 2. Cloudflare API Token を K8s に格納
+
+> **Note**: Cloudflare API Token は Vault + ExternalSecret で管理するが、初回デプロイ時は Vault 自身の TLS 証明書がまだ発行されておらず ESO が Vault に接続できない循環依存がある。そのため初回は手動で Secret を作成し、LE 証明書が発行された後に ExternalSecret による自動同期に移行する。
+
+```bash
+# 初回ブートストラップ (手動)
+kubectl create secret generic cloudflare-api-token \
+  -n cert-manager \
+  --from-literal=api-token='<cloudflare-api-token>'
+
+# Vault が LE 証明書で起動した後、Vault にも格納
+kubectl -n vault exec -it vault-0 -- sh
+vault login
+vault kv put secret/cert-manager/cloudflare-api-token \
+  api-token='<cloudflare-api-token>'
+exit
+
+# 手動作成した Secret を削除 (ESO が ExternalSecret から再生成する)
+kubectl -n cert-manager delete secret cloudflare-api-token
 ```
 
 ### デプロイ (ArgoCD 自動)
 
 `k8s/argocd/apps/cert-manager.yaml` と `k8s/argocd/apps/cert-manager-config.yaml` が main にマージされると、ArgoCD が自動的に:
 1. cert-manager (CRDs + controller) をデプロイ
-2. ClusterIssuer + CA Certificate を作成
-3. ArgoCD の Certificate CR から `argocd-server-tls` Secret を生成・TLS 有効化
-
-### CA 証明書の信頼 (手動)
-
-自己署名 CA のため、ブラウザの証明書警告を回避するには CA 証明書をシステムに信頼させる:
-
-```bash
-# CA 証明書のエクスポート
-kubectl -n cert-manager get secret internal-ca-root-secret \
-  -o jsonpath='{.data.ca\.crt}' | base64 -d > internal-ca.crt
-
-# macOS: キーチェーンに追加
-sudo security add-trusted-cert -d -r trustRoot \
-  -k /Library/Keychains/System.keychain internal-ca.crt
-```
+2. ExternalSecret → Cloudflare API Token を同期
+3. ClusterIssuer (letsencrypt) を作成
+4. 各サービスの Certificate を発行
 
 ### 検証
 
 ```bash
 # ClusterIssuer 確認
 kubectl get clusterissuer
-# → selfsigned-issuer, internal-ca ともに Ready
+# → letsencrypt Ready
 
-# CA Certificate 確認
-kubectl -n cert-manager get certificate internal-ca-root
-# → Ready: True
+# 各サービスの Certificate 確認
+kubectl get certificate -A
+# → vault-server-tls, grafana-server-tls, openclaw-server-tls, argocd-server-tls 全て Ready
 
-# ArgoCD Certificate 確認
-kubectl -n argocd get certificate
-# → argocd-server-tls Ready: True
-
-# HTTPS アクセス確認
-curl -k https://argocd.internal.onoe.dev
+# HTTPS アクセス確認 (Let's Encrypt なので -k 不要)
+curl https://argocd.internal.onoe.dev
 ```
 
 ## Rook Ceph (External Cluster)
@@ -625,9 +641,8 @@ k8s/
 ├── cert-manager/
 │   ├── values.yaml                         # cert-manager Helm values
 │   └── manifests/
-│       ├── self-signed-issuer.yaml        # SelfSigned ClusterIssuer
-│       ├── ca-certificate.yaml            # Internal CA root Certificate
-│       └── ca-issuer.yaml                 # Internal CA ClusterIssuer
+│       ├── letsencrypt-issuer.yaml        # Let's Encrypt ClusterIssuer (Cloudflare DNS-01)
+│       └── externalsecret-cloudflare-api-token.yaml  # Cloudflare API Token (Vault → Secret)
 ├── rook-ceph/
 │   ├── operator-values.yaml               # Rook Operator Helm values
 │   ├── cluster-values.yaml                # Rook Ceph Cluster Helm values
@@ -791,7 +806,7 @@ kubectl -n tempo get pods
 kubectl -n opentelemetry get pods
 
 # 2. Grafana TLS アクセス
-curl -k https://grafana.internal.onoe.dev
+curl https://grafana.internal.onoe.dev
 
 # 3. Grafana 初期パスワード
 kubectl -n monitoring get secret kube-prometheus-stack-grafana \
@@ -967,7 +982,7 @@ kubectl -n vault exec vault-0 -- vault status               # Sealed=false
 
 # DNS/TLS
 dig @10.5.0.53 vault.internal.onoe.dev  # → 10.5.0.3
-curl -k https://vault.internal.onoe.dev:8200/v1/sys/health
+curl https://vault.internal.onoe.dev/v1/sys/health
 
 # ESO
 kubectl get clustersecretstore vault  # Ready=True
@@ -1233,7 +1248,7 @@ kubectl logs -n openclaw openclaw-0
 open https://openclaw.internal.onoe.dev
 ```
 
-> 自己署名証明書のため、ブラウザで証明書警告が出る。cert-manager の CA をシステムに信頼させるか、警告を許可して続行。
+> Let's Encrypt 証明書のため、ブラウザの証明書警告は出ない。
 
 #### 3. Control UI ペアリング
 
@@ -1285,7 +1300,7 @@ nslookup openclaw.internal.onoe.dev
 # → 10.5.0.2
 
 # 5. Control UI アクセス
-curl -sk https://openclaw.internal.onoe.dev | head -5
+curl -s https://openclaw.internal.onoe.dev | head -5
 # → HTML が返ること
 
 # 6. DNS 疎通 (Pod 内)
@@ -1337,7 +1352,7 @@ kubectl logs -n openclaw openclaw-0
 
 ### 既知の制限事項
 
-- **TLS 証明書**: Gateway は `tls.cert`/`tls.key` フィールドを無視し自己生成証明書を使用する (issue #12)
+- **TLS 証明書**: Gateway は `tls.cert`/`tls.key` フィールドを無視し自己生成証明書を使用する。cert-manager で Let's Encrypt 証明書をマウント済みだが未使用 (issue #12)
 - **`/healthz`, `/readyz`**: 専用のヘルスエンドポイントではなく、SPA の catch-all で HTTP 200 を返す
 - **exec allowlist**: `exec-approvals.json` は subPath でマウント。ConfigMap 更新時は Pod 再起動が必要
 

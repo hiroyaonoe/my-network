@@ -5,12 +5,11 @@ metadata:
   namespace: openclaw
 spec:
   secretName: openclaw-server-tls
-  duration: 8760h # 1 year
+  duration: 2160h # 90 days
   renewBefore: 720h # 30 days
   dnsNames:
     - openclaw.internal.onoe.dev
-    - openclaw.openclaw.svc.cluster.local
   issuerRef:
-    name: internal-ca
+    name: letsencrypt
     kind: ClusterIssuer
     group: cert-manager.io

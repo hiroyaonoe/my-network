@@ -722,47 +722,42 @@ k8s_gateway (10.5.0.53:53, LoadBalancer, 3 replicas)
 > K8s ノードが自身の DNS を使うと、DNS Pod が起動する前にクエリが失敗する循環依存が発生するため、K8s ノードは上流 DNS (10.0.0.1) を使い続ける。
 > VM の DNS 変更は各 VM の OS 側 (resolv.conf 等) で個別に設定する。Catalyst DHCP は変更しない。
 
-## 11. TLS (cert-manager + Self-Signed CA)
+## 11. TLS (cert-manager + Let's Encrypt)
 
 ### 11.1 概要
 
 `.dev` TLD は HSTS preload リストに登録されており、ブラウザは `http://*.dev` を自動的に `https://` にリダイレクトする。
-cert-manager で内部 CA を構築し、各サービスに TLS 証明書を発行することで対応する。
+cert-manager + Let's Encrypt で各サービスに TLS 証明書を発行する。
+DNS-01 チャレンジに Cloudflare API を使用する。
 
 | 項目 | 値 |
 |------|-----|
 | cert-manager | cert-manager namespace |
-| Root CA | internal-ca-root (self-signed, ECDSA P-256, 10年) |
-| ClusterIssuer | internal-ca (全 namespace で利用可能) |
+| ClusterIssuer | letsencrypt (ACME DNS-01, Cloudflare) |
+| 証明書 | 各サービスごとに発行 (90日、30日前に自動更新) |
 
 ### 11.2 アーキテクチャ
 
 ```
 cert-manager (cert-manager namespace)
-  ├── SelfSigned ClusterIssuer    ← 自己署名で CA 証明書を発行
-  ├── CA Certificate              ← internal-ca-root (ルート CA 証明書)
-  └── CA ClusterIssuer            ← internal-ca (全 namespace で利用可能)
+  ├── ClusterIssuer (letsencrypt)  ← Let's Encrypt ACME + Cloudflare DNS-01
+  └── ExternalSecret               ← Vault → Cloudflare API Token
 
-ArgoCD (argocd namespace)
-  └── Certificate CR → argocd-server-tls Secret
-        ↑ cert-manager が internal-ca で署名
-        ↓
-      ArgoCD Server が自動検出・TLS 有効化
+各 namespace
+  └── Certificate CR → *-server-tls Secret
+        ↑ cert-manager が Let's Encrypt で署名
 ```
 
-### 11.3 クライアント側 CA 信頼
+### 11.3 Cloudflare API Token
 
-自己署名 CA のため、証明書警告を回避するには CA 証明書をシステムに信頼させる:
+cert-manager が DNS-01 チャレンジで TXT レコードを自動作成・削除するために使用する。
+Vault に格納し、ExternalSecret で cert-manager namespace に同期する。
 
-```bash
-# CA 証明書のエクスポート
-kubectl -n cert-manager get secret internal-ca-root-secret \
-  -o jsonpath='{.data.ca\.crt}' | base64 -d > internal-ca.crt
-
-# macOS: キーチェーンに追加
-sudo security add-trusted-cert -d -r trustRoot \
-  -k /Library/Keychains/System.keychain internal-ca.crt
-```
+| 項目 | 値 |
+|------|-----|
+| Permissions | Zone:DNS:Edit, Zone:Zone:Read |
+| Zone Resources | onoe.dev のみ |
+| Vault パス | secret/cert-manager/cloudflare-api-token |
 
 ## 12. オブザーバビリティ (Grafana Stack)
 

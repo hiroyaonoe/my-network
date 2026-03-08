@@ -5,11 +5,11 @@ metadata:
   namespace: monitoring
 spec:
   secretName: grafana-server-tls
-  duration: 8760h # 1 year
+  duration: 2160h # 90 days
   renewBefore: 720h # 30 days
   dnsNames:
     - grafana.internal.onoe.dev
   issuerRef:
-    name: internal-ca
+    name: letsencrypt
     kind: ClusterIssuer
     group: cert-manager.io
