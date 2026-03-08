@@ -42,33 +42,14 @@ RUN go install github.com/junegunn/fzf@latest \
     && go install github.com/k1LoW/git-wt@latest \
     && rm -rf /root/go
 
-# Node.js via nodenv (update ARG to rebuild)
-ARG NODE_MAJOR=22
-ENV NODENV_ROOT=/opt/nodenv PATH="/opt/nodenv/shims:${PATH}"
-RUN mkdir -p /opt/nodenv && chown onoe:onoe /opt/nodenv
-USER onoe
-RUN NODE_VERSION="$(nodenv install --list | grep -E '^\s*[0-9]+\.[0-9]+\.[0-9]+$' | grep -E "^\s*${NODE_MAJOR}\." | tail -1 | tr -d ' ')" \
-    && nodenv install "$NODE_VERSION" \
-    && nodenv global "$NODE_VERSION" \
-    && nodenv rehash
-
-# uv + Python
+# uv (Python installer)
 USER root
-ENV UV_PYTHON_INSTALL_DIR=/opt/uv/python
 RUN curl -LsSf https://astral.sh/uv/install.sh | sh \
     && mv /root/.local/bin/uv /usr/local/bin/ \
     && mv /root/.local/bin/uvx /usr/local/bin/ \
-    && rm -rf /root/.local \
-    && uv python install --default \
-    && ln -sf "$(uv python find)" /usr/local/bin/python3 \
-    && ln -sf "$(uv python find)" /usr/local/bin/python
-
-# Claude Code
-USER onoe
-RUN curl -fsSL https://claude.ai/install.sh | bash
+    && rm -rf /root/.local
 
 # GitHub SSH keys (changes when keys rotate)
-USER root
 RUN curl -fsSL https://github.com/hiroyaonoe.keys > /etc/ssh/github_authorized_keys
 
 EXPOSE 22
