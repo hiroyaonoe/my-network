@@ -33,7 +33,7 @@ ENV CUSTOM_PORT="8080" \
 
 COPY root/ /
 
-EXPOSE 8080 8443
+EXPOSE 8080 8443 3001 3443
 VOLUME ["/config", "/vaults"]
 
 HEALTHCHECK CMD curl --fail http://localhost:${CUSTOM_PORT}/ || exit 1

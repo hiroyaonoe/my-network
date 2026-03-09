@@ -44,7 +44,7 @@ spec:
           type: RuntimeDefault
       initContainers:
         - name: git-clone
-          image: alpine/git:latest
+          image: alpine/git:v2.52.0
           env:
             - name: GITHUB_PAT
               valueFrom:
@@ -54,13 +54,14 @@ spec:
           command: ["/bin/sh", "-c"]
           args:
             - |
+              git config --global url."https://${GITHUB_PAT}@github.com/".insteadOf "https://github.com/"
               if [ -d /vaults/obsidian-private/.git ]; then
                 cd /vaults/obsidian-private
-                git config --local url."https://${GITHUB_PAT}@github.com/".insteadOf "https://github.com/"
-                git pull --ff-only || true
+                git pull --ff-only || echo "WARNING: git pull failed, starting with existing data"
               else
-                git clone "https://${GITHUB_PAT}@github.com/hiroyaonoe/obsidian-private.git" /vaults/obsidian-private
+                git clone "https://github.com/hiroyaonoe/obsidian-private.git" /vaults/obsidian-private
               fi
+              git config --global --remove-section url."https://${GITHUB_PAT}@github.com/"
               cd /vaults/obsidian-private
               git config user.name "obsidian-remote"
               git config user.email "obsidian@internal.onoe.dev"
