@@ -19,6 +19,9 @@
 # WAN側ルータ (参考)
 # 10.0.0.1        wan-router
 
+# K8s LoadBalancer VIP
+# 10.5.0.5       obsidian.internal.onoe.dev  # Obsidian (UI + MCP)
+
 # VM用ネットワーク (初期VLAN)
 # 以下は例。実際のVMを作成したら追記する
 # 10.2.0.2        bastion-01      # VLAN 100
