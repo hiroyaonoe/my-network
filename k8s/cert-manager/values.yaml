@@ -1,2 +1,9 @@
 crds:
   enabled: true
+
+# Use recursive resolvers for DNS-01 challenge verification instead of
+# walking the NS delegation chain. Required because internal.onoe.dev
+# has no NS delegation, causing cert-manager to fail to find
+# authoritative nameservers for _acme-challenge.*.internal.onoe.dev.
+dns01RecursiveNameserversOnly: true
+dns01RecursiveNameservers: "1.1.1.1:53,8.8.8.8:53"
