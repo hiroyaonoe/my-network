@@ -70,7 +70,7 @@ spec:
               mountPath: /vaults
       containers:
         - name: obsidian
-          image: ghcr.io/hiroyaonoe/obsidian:latest
+          image: ghcr.io/hiroyaonoe/obsidian:sha-1cfff6b
           ports:
             - name: ui-https
               containerPort: 8443
