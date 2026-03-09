@@ -672,8 +672,12 @@ k8s/
 │       ├── externalsecret-rook-csi-rbd-provisioner.yaml # ExternalSecret
 │       └── externalsecret-rook-csi-rbd-node.yaml      # ExternalSecret
 ├── images/
-│   └── ubuntu/
-│       └── Dockerfile                          # カスタムイメージ (GHCR にビルド)
+│   ├── ubuntu/
+│   │   └── Dockerfile                          # ubuntu-dev イメージ (GHCR にビルド)
+│   └── obsidian/
+│       ├── Dockerfile                          # obsidian イメージ (GHCR にビルド)
+│       ├── LICENSE.obsidian-remote             # MIT License (sytone/obsidian-remote)
+│       └── root/                               # コンテナ設定ファイル (autostart, menu.xml 等)
 ├── claude/
 │   └── manifests/
 │       ├── statefulset.yaml                          # StatefulSet + headless Service
@@ -681,7 +685,18 @@ k8s/
 │       ├── networkpolicy-default-deny.yaml           # Default deny all
 │       ├── networkpolicy-allow-dns.yaml              # Allow DNS to CoreDNS
 │       ├── networkpolicy-allow-external-egress.yaml  # Allow HTTP/HTTPS/SSH to external
+│       ├── networkpolicy-allow-obsidian-egress.yaml  # Allow egress to Obsidian MCP
 │       └── networkpolicy-allow-ssh-ingress.yaml      # Allow SSH ingress
+├── obsidian/
+│   └── manifests/
+│       ├── statefulset.yaml                          # StatefulSet + headless Service
+│       ├── service.yaml                              # LoadBalancer Service (UI + MCP)
+│       ├── certificate.yaml                          # TLS Certificate (cert-manager)
+│       ├── externalsecret.yaml                       # ExternalSecret (Vault → GitHub PAT)
+│       ├── networkpolicy-default-deny.yaml           # Default deny all
+│       ├── networkpolicy-allow-dns.yaml              # Allow DNS to CoreDNS
+│       ├── networkpolicy-allow-external-egress.yaml  # Allow HTTPS to external
+│       └── networkpolicy-allow-ingress.yaml          # Allow ingress to UI + MCP
 ├── openclaw/
 │   └── manifests/
 │       ├── statefulset.yaml              # StatefulSet + headless Service
@@ -745,7 +760,8 @@ k8s/
         ├── external-secrets.yaml          # ESO Application
         ├── external-secrets-config.yaml   # ClusterSecretStore Application
         ├── claude.yaml                  # Claude Code Container Application
-        └── openclaw.yaml                # OpenClaw AI Gateway Application
+        ├── openclaw.yaml                # OpenClaw AI Gateway Application
+        └── obsidian.yaml                # Obsidian Container Application
 ```
 
 > `talosctl gen config` および `talosctl machineconfig patch` で生成されるファイルは `k8s/talos/` に配置され、シークレットを含むため `.gitignore` で除外している。
@@ -1376,6 +1392,161 @@ kubectl logs -n openclaw openclaw-0
 - **TLS 証明書**: Gateway は `tls.cert`/`tls.key` フィールドを無視し自己生成証明書を使用する。cert-manager で Let's Encrypt 証明書をマウント済みだが未使用 (issue #12)
 - **`/healthz`, `/readyz`**: 専用のヘルスエンドポイントではなく、SPA の catch-all で HTTP 200 を返す
 - **exec allowlist**: `exec-approvals.json` は subPath でマウント。ConfigMap 更新時は Pod 再起動が必要
+
+## Obsidian (コンテナ化ナレッジベース)
+
+obsidian-remote ベースの Obsidian Desktop コンテナ。ブラウザから noVNC 経由で Obsidian UI にアクセスし、obsidian-git プラグインで hiroyaonoe/obsidian-private リポジトリと双方向同期する。obsidian-mcp-plugin により MCP サーバーも公開する。
+
+ref: https://github.com/hiroyaonoe/my-network/issues/13
+
+### アーキテクチャ
+
+```
+[GHCR] ghcr.io/hiroyaonoe/obsidian:latest
+  └── GitHub Actions: k8s/images/obsidian/Dockerfile 変更時にビルド・プッシュ
+
+[StatefulSet] (obsidian namespace, 1 replica)
+  ├── initContainer: alpine/git (git clone/pull obsidian-private)
+  ├── image: ghcr.io/hiroyaonoe/obsidian:latest
+  ├── PVC vaults: 8Gi (ceph-block) → /vaults (Obsidian vault データ)
+  ├── PVC config: 2Gi (ceph-block) → /config (Obsidian アプリ設定)
+  ├── TLS: cert-manager → /config/ssl/ (KasmVNC 用)
+  └── ports: 8443 (UI), 3443 (MCP HTTPS), 3001 (MCP HTTP)
+
+[Service] obsidian (headless)
+  └── ClusterIP: None (StatefulSet 必須)
+
+[Service] obsidian-lb (LoadBalancer)
+  └── 443 → 8443 (UI), 3443 → 3443 (MCP HTTPS), 3001 → 3001 (MCP HTTP)
+  └── obsidian.internal.onoe.dev (10.5.0.5)
+
+[NetworkPolicy] (4段階)
+  ├── default-deny-all (ingress + egress 全拒否)
+  ├── allow-dns → kube-system/kube-dns (UDP/TCP 53)
+  ├── allow-external-egress → 0.0.0.0/0 (except private IPs) on TCP 443
+  └── allow-ingress → TCP 8443/3443/3001
+```
+
+### リソース要件
+
+| | requests | limits |
+|---|---|---|
+| CPU | 200m | 2 |
+| Memory | 512Mi | 4Gi |
+
+### イメージビルド
+
+- ベース: [sytone/obsidian-remote](https://github.com/sytone/obsidian-remote) (MIT License)
+- Dockerfile: `k8s/images/obsidian/Dockerfile` (Obsidian v1.12.4, git 追加)
+- GitHub Actions: `k8s/images/obsidian/**` への push (main) または workflow_dispatch でビルド・プッシュ
+- イメージ: `ghcr.io/hiroyaonoe/obsidian` (タグ: `latest` + `sha-xxxxxxx`)
+
+### Git 同期
+
+- Init Container が Pod 起動時に `hiroyaonoe/obsidian-private` を clone/pull
+- GitHub PAT は Vault → ExternalSecret で注入
+- 起動後は obsidian-git プラグイン (BRAT でインストール) が定期的に commit/push/pull
+
+### MCP サーバー
+
+- [aaronsb/obsidian-mcp-plugin](https://github.com/aaronsb/obsidian-mcp-plugin) (v0.11.12) を BRAT でインストール
+- Streamable HTTP: port 3443 (HTTPS), port 3001 (HTTP)
+- Claude Code からは `mcp-remote` 経由で接続:
+  ```json
+  {
+    "mcpServers": {
+      "obsidian": {
+        "command": "npx",
+        "args": ["mcp-remote", "https://obsidian.internal.onoe.dev:3443/mcp"]
+      }
+    }
+  }
+  ```
+
+### 手動前提条件 (Git push 前)
+
+#### 1. GitHub PAT 作成
+
+GitHub Settings → Developer settings → Personal access tokens → Fine-grained tokens:
+
+| 項目 | 値 |
+|------|-----|
+| Repository access | Only select repositories: hiroyaonoe/obsidian-private |
+| Permissions | Contents: Read and write |
+
+#### 2. Vault にシークレット格納
+
+```bash
+kubectl -n vault exec -it vault-0 -- sh
+vault login
+vault kv put secret/obsidian/github-pat \
+  token='ghp_...'
+exit
+```
+
+### デプロイ (ArgoCD 自動)
+
+`k8s/argocd/apps/obsidian.yaml` が main にマージされると、ArgoCD が自動的に obsidian namespace にデプロイする。
+
+### セットアップ (デプロイ後)
+
+#### 1. Pod 起動確認
+
+```bash
+kubectl -n obsidian get pods
+# → obsidian-0  1/1  Running
+
+kubectl -n obsidian get svc obsidian-lb
+# → EXTERNAL-IP: 10.5.0.5
+```
+
+#### 2. Obsidian UI アクセス
+
+ブラウザで `https://obsidian.internal.onoe.dev` にアクセス。
+
+#### 3. プラグインインストール (初回のみ)
+
+Obsidian UI 内で:
+
+1. Community plugins → Browse → BRAT をインストール
+2. BRAT → Add Beta Plugin:
+   - `Vinzent03/obsidian-git` (Git 同期)
+   - `aaronsb/obsidian-mcp-plugin` (MCP サーバー)
+3. obsidian-git: Auto commit/push/pull を設定
+4. obsidian-mcp-plugin: ポート 3001/3443 を確認、API Key を設定
+
+### 検証
+
+```bash
+# 1. Pod Running
+kubectl -n obsidian get pods
+# → obsidian-0  1/1  Running
+
+# 2. Service VIP
+kubectl -n obsidian get svc obsidian-lb
+# → EXTERNAL-IP: 10.5.0.5
+
+# 3. DNS 解決
+nslookup obsidian.internal.onoe.dev
+# → 10.5.0.5
+
+# 4. PVC
+kubectl -n obsidian get pvc
+# → vaults-obsidian-0  8Gi  Bound
+# → config-obsidian-0  2Gi  Bound
+
+# 5. UI アクセス
+curl -k https://obsidian.internal.onoe.dev
+# → HTML が返ること
+
+# 6. MCP エンドポイント
+curl -k https://obsidian.internal.onoe.dev:3443/mcp
+# → MCP レスポンス
+
+# 7. Git 同期確認
+kubectl exec -n obsidian obsidian-0 -- ls /vaults/obsidian-private
+# → リポジトリの内容が表示されること
+```
 
 ## 関連ドキュメント
 

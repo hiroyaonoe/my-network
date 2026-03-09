@@ -874,6 +874,7 @@ Vault に Secret 値を格納し、ESO が ExternalSecret CR に基づいて K8s
 | 10.5.0.1 | argocd.internal.onoe.dev | ArgoCD |
 | 10.5.0.2 | grafana.internal.onoe.dev | Grafana |
 | 10.5.0.3 | vault.internal.onoe.dev | Vault |
+| 10.5.0.5 | obsidian.internal.onoe.dev | Obsidian (UI + MCP) |
 | 10.5.0.53 | (DNS) | k8s-gateway |
 
 ### 13.4 手動前提条件
