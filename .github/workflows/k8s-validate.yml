@@ -1,0 +1,70 @@
+name: Validate K8s Manifests
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "k8s/**"
+  pull_request:
+    paths:
+      - "k8s/**"
+
+jobs:
+  yamllint:
+    name: YAML Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install yamllint
+        run: pip install yamllint
+
+      - name: Run yamllint
+        run: yamllint -c .yamllint.yml k8s/
+
+  kubeconform:
+    name: Kubeconform
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install kubeconform
+        run: |
+          curl -fsSL https://github.com/yannh/kubeconform/releases/latest/download/kubeconform-linux-amd64.tar.gz \
+            | tar xz -C /usr/local/bin
+
+      - name: Validate ArgoCD Applications
+        run: |
+          kubeconform -summary -output text \
+            -schema-location default \
+            -schema-location 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json' \
+            -skip Certificate,ClusterIssuer,ExternalSecret,ClusterSecretStore,CiliumL2AnnouncementPolicy,CiliumLoadBalancerIPPool,PrometheusRule \
+            k8s/argocd/apps/*.yaml \
+            k8s/argocd/bootstrap/*.yaml
+
+      - name: Validate K8s manifests
+        run: |
+          kubeconform -summary -output text \
+            -schema-location default \
+            -schema-location 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json' \
+            -ignore-filename-pattern 'kustomization\.yaml$' \
+            -ignore-filename-pattern 'values\.yaml$' \
+            k8s/*/manifests/*.yaml
+
+  kustomize-build:
+    name: Kustomize Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install kustomize
+        run: |
+          curl -fsSL https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh | bash
+          mv kustomize /usr/local/bin/
+
+      - name: Find and validate kustomization directories
+        run: |
+          find k8s -name 'kustomization.yaml' -printf '%h\n' | while read dir; do
+            echo "==> Building $dir"
+            kustomize build "$dir" > /dev/null
+          done
