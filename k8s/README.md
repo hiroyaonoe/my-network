@@ -685,6 +685,7 @@ k8s/
 │       ├── networkpolicy-default-deny.yaml           # Default deny all
 │       ├── networkpolicy-allow-dns.yaml              # Allow DNS to CoreDNS
 │       ├── networkpolicy-allow-external-egress.yaml  # Allow HTTP/HTTPS/SSH to external
+│       ├── networkpolicy-allow-obsidian-egress.yaml  # Allow egress to Obsidian MCP
 │       └── networkpolicy-allow-ssh-ingress.yaml      # Allow SSH ingress
 ├── obsidian/
 │   └── manifests/
