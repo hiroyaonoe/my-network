@@ -1,0 +1,21 @@
+#!/usr/bin/with-contenv bash
+
+if [ -n "$PASSWORD" ]; then
+    echo "abc:${PASSWORD}" | chpasswd
+fi
+
+if [ ! -d /vaults ]; then
+    mkdir -p /vaults
+fi
+
+# Timezone configuration
+if [ -n "$TZ" ]; then
+    echo "${TZ}" >/etc/timezone
+    dpkg-reconfigure -f noninteractive tzdata
+fi
+
+# Permissions
+chown -R abc:abc \
+    /config \
+    /vaults \
+    /root
