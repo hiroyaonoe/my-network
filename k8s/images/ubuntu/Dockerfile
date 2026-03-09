@@ -6,7 +6,7 @@ RUN apt-get update \
         openssh-server curl ca-certificates git sudo \
         build-essential procps file jq \
         zsh neovim tmux \
-        ripgrep tree wget unzip direnv gnupg \
+        ripgrep tree wget unzip direnv gnupg less \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # System config + users (rarely changes)
