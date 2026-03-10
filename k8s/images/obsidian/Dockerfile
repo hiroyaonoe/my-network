@@ -11,7 +11,7 @@ RUN apt-get update && \
     apt-get install -y --no-install-recommends \
         curl libnss3 zlib1g-dev dbus-x11 uuid-runtime \
         libfuse2 libatk1.0-0 libatk-bridge2.0-0 libcups2 libgtk-3-0 \
-        git && \
+        git fonts-noto-cjk && \
     apt-get clean && rm -rf /var/lib/apt/lists/* /var/tmp/* /tmp/*
 
 # Download and install Obsidian
