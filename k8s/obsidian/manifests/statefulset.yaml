@@ -63,8 +63,8 @@ spec:
               fi
               git config --global --remove-section url."https://${GITHUB_PAT}@github.com/"
               cd /vaults/obsidian-private
-              git config user.name "obsidian-remote"
-              git config user.email "obsidian@internal.onoe.dev"
+              git config user.name "Hiroya Onoe"
+              git config user.email "git@onoe.dev"
           volumeMounts:
             - name: vaults
               mountPath: /vaults
