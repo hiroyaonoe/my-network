@@ -65,6 +65,7 @@ spec:
               cd /vaults/obsidian-private
               git config user.name "Hiroya Onoe"
               git config user.email "git@onoe.dev"
+              git config url."https://${GITHUB_PAT}@github.com/".insteadOf "https://github.com/"
           volumeMounts:
             - name: vaults
               mountPath: /vaults
