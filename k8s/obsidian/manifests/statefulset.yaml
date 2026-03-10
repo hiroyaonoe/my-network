@@ -91,7 +91,7 @@ spec:
               subPath: tls.crt
               readOnly: true
             - name: tls
-              mountPath: /config/ssl/key.pem
+              mountPath: /config/ssl/cert.key
               subPath: tls.key
               readOnly: true
           resources:
