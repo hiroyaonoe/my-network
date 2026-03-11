@@ -9,8 +9,12 @@ spec:
     - Egress
   egress:
     - to:
-        - ipBlock:
-            cidr: 10.5.0.5/32
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: obsidian
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: obsidian
       ports:
         - protocol: TCP
           port: 3443
