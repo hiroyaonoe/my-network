@@ -1,0 +1,12 @@
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: sshwifty-tls
+  namespace: sshwifty
+spec:
+  secretName: sshwifty-tls
+  issuerRef:
+    name: letsencrypt
+    kind: ClusterIssuer
+  dnsNames:
+    - bastion.internal.onoe.dev
