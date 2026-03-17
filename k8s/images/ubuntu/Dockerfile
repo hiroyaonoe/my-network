@@ -14,7 +14,7 @@ RUN mkdir -p /run/sshd \
     && sed -i 's/^#*PermitRootLogin.*/PermitRootLogin no/' /etc/ssh/sshd_config \
     && sed -i 's|^#*AuthorizedKeysFile.*|AuthorizedKeysFile .ssh/authorized_keys /etc/ssh/github_authorized_keys|' /etc/ssh/sshd_config \
     && sed -i 's/^#*ClientAliveInterval.*/ClientAliveInterval 60/' /etc/ssh/sshd_config \
-    && sed -i 's/^#*ClientAliveCountMax.*/ClientAliveCountMax 720/' /etc/ssh/sshd_config \
+    && sed -i 's/^#*ClientAliveCountMax.*/ClientAliveCountMax 0/' /etc/ssh/sshd_config \
     && useradd -m -s /usr/bin/zsh -G sudo onoe \
     && echo 'onoe ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers \
     && chsh -s /usr/bin/zsh
