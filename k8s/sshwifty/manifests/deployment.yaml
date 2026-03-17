@@ -70,7 +70,8 @@ spec:
         - name: secrets
           secret:
             secretName: sshwifty-secrets
-            defaultMode: 0400
+            defaultMode: 0444
         - name: tls
           secret:
             secretName: sshwifty-tls
+            defaultMode: 0444
