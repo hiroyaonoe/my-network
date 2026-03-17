@@ -9,4 +9,4 @@ spec:
     name: letsencrypt
     kind: ClusterIssuer
   dnsNames:
-    - bastion.internal.onoe.dev
+    - terminal.internal.onoe.dev

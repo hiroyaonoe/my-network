@@ -7,7 +7,7 @@ metadata:
     app.kubernetes.io/name: sshwifty
   annotations:
     io.cilium/lb-ipam-ips: "10.5.0.6"
-    external-dns.alpha.kubernetes.io/hostname: bastion.internal.onoe.dev
+    external-dns.alpha.kubernetes.io/hostname: terminal.internal.onoe.dev
 spec:
   type: LoadBalancer
   ports:

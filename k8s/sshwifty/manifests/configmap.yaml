@@ -8,7 +8,7 @@ metadata:
 data:
   sshwifty.conf.json: |
     {
-      "HostName": "bastion.internal.onoe.dev",
+      "HostName": "terminal.internal.onoe.dev",
       "SharedKey": "",
       "DialTimeout": 10,
       "Servers": [
