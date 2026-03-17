@@ -21,8 +21,8 @@ data:
           "HeartbeatTimeout": 15,
           "ReadDelay": 10,
           "WriteDelay": 10,
-          "TLSCertificateFile": "",
-          "TLSCertificateKeyFile": "",
+          "TLSCertificateFile": "/certs/tls.crt",
+          "TLSCertificateKeyFile": "/certs/tls.key",
           "ServerMessage": ""
         }
       ],
