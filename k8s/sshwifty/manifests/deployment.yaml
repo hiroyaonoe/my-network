@@ -56,16 +56,12 @@ spec:
               cpu: 500m
               memory: 128Mi
           readinessProbe:
-            httpGet:
-              path: /
+            tcpSocket:
               port: http
-              scheme: HTTPS
             periodSeconds: 10
           livenessProbe:
-            httpGet:
-              path: /
+            tcpSocket:
               port: http
-              scheme: HTTPS
             periodSeconds: 30
       volumes:
         - name: config
