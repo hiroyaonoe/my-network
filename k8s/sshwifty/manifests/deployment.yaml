@@ -1,0 +1,76 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sshwifty
+  namespace: sshwifty
+  labels:
+    app.kubernetes.io/name: sshwifty
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: sshwifty
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: sshwifty
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: sshwifty
+          image: niruix/sshwifty:0.4.2-beta-release
+          ports:
+            - name: http
+              containerPort: 8182
+          env:
+            - name: SSHWIFTY_SHAREDKEY
+              valueFrom:
+                secretKeyRef:
+                  name: sshwifty-secrets
+                  key: shared-key
+          volumeMounts:
+            - name: config
+              mountPath: /home/sshwifty/.config/sshwifty/sshwifty.conf.json
+              subPath: sshwifty.conf.json
+              readOnly: true
+            - name: secrets
+              mountPath: /secrets/bastion-ssh-key
+              subPath: bastion-ssh-key
+              readOnly: true
+            - name: tls
+              mountPath: /certs/tls.crt
+              subPath: tls.crt
+              readOnly: true
+            - name: tls
+              mountPath: /certs/tls.key
+              subPath: tls.key
+              readOnly: true
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 500m
+              memory: 128Mi
+          readinessProbe:
+            tcpSocket:
+              port: http
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: http
+            periodSeconds: 30
+      volumes:
+        - name: config
+          configMap:
+            name: sshwifty-config
+        - name: secrets
+          secret:
+            secretName: sshwifty-secrets
+            defaultMode: 0400
+        - name: tls
+          secret:
+            secretName: sshwifty-tls
