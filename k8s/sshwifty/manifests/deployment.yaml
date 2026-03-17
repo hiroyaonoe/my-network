@@ -33,7 +33,7 @@ spec:
                   key: shared-key
           volumeMounts:
             - name: config
-              mountPath: /home/sshwifty/.config/sshwifty/sshwifty.conf.json
+              mountPath: /home/sshwifty/.config/sshwifty.conf.json
               subPath: sshwifty.conf.json
               readOnly: true
             - name: secrets
